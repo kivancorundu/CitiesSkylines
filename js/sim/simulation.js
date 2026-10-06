@@ -4,7 +4,7 @@ import { SERVICES } from '../data/services.js';
 import { computeConnectivity, accessCell } from './network.js';
 import { pruneSegs, traceUncovered, normalizeNetwork } from './roadgeom.js';
 import { computeZonable, growthTick, growthSlow } from './growth.js';
-import { computeCoverage, computeNearRoad } from './coverage.js';
+import { computeCoverage, computeNearRoad, computeShopAccess } from './coverage.js';
 import { computeNetworks, allocateUtilities } from './utilities.js';
 import { updatePollution, updateLandValue, computeWaterDist } from './environment.js';
 import { updatePopulation, matchJobs, buildingServices, monthlyEducation } from './citizens.js';
@@ -31,6 +31,7 @@ export function initRuntime(s) {
   refreshRoads(s);
   computeNetworks(s); s.rt.dirty.util = false;
   weatherTick(s);
+  computeShopAccess(s);
   updatePopulation(s); matchJobs(s); computeCityEffects(s); buildingServices(s);
   computeCoverage(s); allocateUtilities(s); computeRates(s);
   if (!s.chirps.length) chirp(s, 'welcome');
@@ -114,6 +115,7 @@ export function tick(s) {
   }
   if (rt.dirty.cov && t.tick % 20 === 7 || t.tick % 90 === 47) { computeCoverage(s); rt.dirty.cov = false; }
   if (t.tick % 20 === 5) updatePollution(s);
+  if (t.tick % 30 === 22) computeShopAccess(s);
   if (t.tick % 30 === 15) { updateLandValue(s); trafficStats(s); computeHappyMap(s); }
   if (t.tod >= 24) monthly(s);
   // olayları işle

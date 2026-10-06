@@ -105,4 +105,61 @@ assert.equal(MILESTONES.length, 21);
   assert.ok(samplesInCells(v, stretch).length >= 1, 'önizleme örnekleri');
   console.log('eski yol yumuşatma + değiştir testleri geçti, en büyük dönüş', maxTurn.toFixed(2));
 }
+// fabrika kirliliği şikayetleri ve alışveriş erişimi (marketsiz mahalle → ticari talep)
+{
+  const { POL_WARN, SHOP_RANGE } = await import('../js/data/balance.js');
+  // nehre kadar tek cadde, kuzeyi konut; altyapı (su, kanalizasyon, rüzgar) dahil
+  const town = (opts) => {
+    const t = createState(12345); initRuntime(t); t.money = 5e6; t.milestone = 10; t.owned.fill(1); t.settings.disasters = false;
+    const z = N / 2; let x0 = 0; for (let x = 0; x < N; x++) if (t.road[idx(x, z)]) x0 = x;
+    let rx = x0; while (rx < N - 1 && !t.water[idx(rx + 1, z)]) rx++;
+    assert.ok(rx - x0 > 25, 'nehre kadar yer var');
+    assert.ok(A.buildRoad(t, A.linePath(x0, z, rx, z), 1).ok);
+    A.buildNetwork(t, 'pipeW', A.linePath(x0, z, rx, z)); A.buildNetwork(t, 'pipeS', A.linePath(x0, z, rx, z));
+    const put = (key, cx, cz) => { for (let r = 0; r < 14; r++) for (let dz = -r; dz <= r; dz++) for (let dx = -r; dx <= r; dx++) for (let f = 0; f < 4; f++) { const res = A.placeService(t, key, cx + dx, cz + dz, f); if (res.ok) { const c = []; for (let zz = res.b.z - 1; zz <= res.b.z + res.b.sz; zz++) for (let xx = res.b.x - 1; xx <= res.b.x + res.b.sx; xx++) c.push([xx, zz]); A.buildNetwork(t, 'pipeW', c); A.buildNetwork(t, 'pipeS', c); return res.b; } } return null; };
+    assert.ok(put('water_pump', rx - 1, z - 3) && put('sewage_outlet', rx - 1, z + 4), 'pompa ve çıkış');
+    for (let k = 0; k < 3; k++) put('wind_turbine', x0 + 18, z + 3);
+    A.paintZone(t, A.rectCells(x0 + 1, z - 6, rx - 1, z - 1), 1);
+    if (opts.ind) A.paintZone(t, A.rectCells(x0 + 1, z + 1, x0 + 12, z + 6), 9);
+    if (opts.res2) A.paintZone(t, A.rectCells(x0 + 1, z + 1, x0 + 14, z + 6), 1);
+    if (opts.shop) A.paintZone(t, A.rectCells(x0 + 22, z + 1, rx - 4, z + 3), 7);
+    for (let k = 0; k < TICKS_PER_MONTH * (opts.months || 5); k++) tick(t);
+    return { t, x0 };
+  };
+  const homes = (t) => Object.values(t.buildings).filter((b) => b.kind === 'zone' && b.type === 1 && b.built >= 1 && !b.abandoned);
+  const avg = (a, f) => a.reduce((q, b) => q + f(b), 0) / Math.max(1, a.length);
+  // (a) sanayinin karşısındaki evler fabrikalardan şikayet eder, uzaktakiler etmez
+  {
+    const { t, x0 } = town({ ind: true, shop: true, months: 6 });
+    assert.ok(Object.values(t.buildings).some((b) => b.kind === 'zone' && b.type === 9 && b.built >= 1), 'fabrikalar kuruldu');
+    const hs = homes(t), near = hs.filter((b) => b.x <= x0 + 12), far = hs.filter((b) => b.x >= x0 + 24);
+    assert.ok(near.length >= 3 && far.length >= 3, 'evler kuruldu ' + near.length + '/' + far.length);
+    const expo = (b) => t.polA[idx(b.x, b.z)];
+    assert.ok(avg(near, expo) > POL_WARN, 'yakın evlerde hava kirliliği ' + avg(near, expo).toFixed(2));
+    assert.ok(near.some((b) => /Hava kirliliği/.test(b.probWhy) && b.probIcon === '😷'), 'kirlilik sorunu gösterilir');
+    assert.ok(!far.some((b) => /Hava kirliliği/.test(b.probWhy)), 'uzak evler şikayet etmez');
+    const hn = avg(near, (b) => b.happy), hf = avg(far, (b) => b.happy);
+    assert.ok(hn < hf - 2, `yakın evler daha mutsuz (${hn.toFixed(1)} < ${hf.toFixed(1)})`);
+    assert.ok(avg(near, (b) => t.lv[idx(b.x, b.z)]) < avg(far, (b) => t.lv[idx(b.x, b.z)]), 'arazi değeri düşer');
+    assert.ok(t.rt.polComplainHH > 0, 'şikayetçi hane sayılır');
+    assert.ok(t.chirps.some((c) => c.key === 'factorySmoke'), 'Chirper şikayeti');
+    console.log('kirlilik şikayeti: mutluluk yakın/uzak', hn.toFixed(1), hf.toFixed(1), 'şikayetçi hane', t.rt.polComplainHH);
+  }
+  // (b) marketsiz mahalle "Yakında market yok" der ve ticari talebi artırır
+  {
+    const { t: a } = town({ res2: true, months: 4 });
+    const { t: b } = town({ res2: true, shop: true, months: 4 });
+    const ha = homes(a), hb = homes(b);
+    assert.ok(ha.length >= 10 && hb.length >= 10, 'evler kuruldu');
+    assert.ok(ha.every((q) => q._shopD > SHOP_RANGE), 'marketsiz şehirde dükkân menzil dışında');
+    assert.ok(ha.some((q) => /Yakında market yok/.test(q.probWhy) && q.probIcon === '🛒'), 'market yok sorunu');
+    assert.ok(Object.values(b.buildings).some((q) => q.kind === 'zone' && q.type === 7 && q.built >= 1), 'dükkân kuruldu');
+    assert.ok(!hb.some((q) => /Yakında market yok/.test(q.probWhy)), 'dükkânlı şehirde sorun yok');
+    assert.ok(a.rt.noShopHH > 0 && a.rt.comLocalDemand > 0.2, 'yerel ticari talep ' + a.rt.comLocalDemand);
+    assert.ok((b.rt.comLocalDemand || 0) < 0.05, 'dükkân varken yerel talep yok');
+    assert.ok(a.demand.com > b.demand.com + 0.2, `ticari talep artar (${a.demand.com.toFixed(2)} > ${b.demand.com.toFixed(2)})`);
+    assert.ok(a.rt.shopDist && a.rt.shopDist.length === N * N && b.rt.shopDist[hb[0].access] <= SHOP_RANGE, 'alışveriş mesafe haritası');
+    console.log('alışveriş erişimi: ticari talep marketsiz/marketli', a.demand.com.toFixed(2), b.demand.com.toFixed(2), 'marketsiz hane', a.rt.noShopHH);
+  }
+}
 console.log('TÜM ÖZELLİK TESTLERİ GEÇTİ');

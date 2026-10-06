@@ -4,6 +4,7 @@ import { ZONES, RESOURCES } from '../data/zones.js';
 import { SERVICES } from '../data/services.js';
 import { ROADS } from '../data/roads.js';
 import { residents } from '../sim/buildings.js';
+import { SHOP_RANGE } from '../data/balance.js';
 
 const hex = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
 const zoneRGB = {}; for (const k in ZONES) zoneRGB[k] = hex(parseInt(ZONES[k].color.slice(1), 16));
@@ -28,6 +29,7 @@ export const INFO_VIEWS = [
   { key: 'polW', name: 'Su Kirliliği', icon: '☣️' },
   { key: 'traffic', name: 'Trafik', icon: '🚦' },
   { key: 'happiness', name: 'Mutluluk', icon: '😊' },
+  { key: 'shop', name: 'Alışveriş Erişimi', icon: '🛒' },
   { key: 'crime', name: 'Suç', icon: '🚨' },
   covView('health', 'Sağlık', '🏥', [230, 80, 80]),
   covView('death', 'Defin', '⚰️', [150, 120, 180]),
@@ -77,6 +79,7 @@ export function buildOverlay(s, out, opts) {
         case 'polA': if (s.polA[i] > 0.03) { c = [120, 60, 140]; a = clamp(s.polA[i] * 230, 0, 210); } break;
         case 'polN': if (s.polN[i] > 0.05) { c = grad(s.polN[i], [[240, 220, 60], [230, 60, 40]]); a = clamp(s.polN[i] * 220, 0, 200); } break;
         case 'polW': if (s.water[i]) { c = grad(s.polW[i], [[40, 140, 230], [140, 100, 40]]); a = 200; } break;
+        case 'shop': if (!s.water[i] && s.rt.shopDist && s.rt.nearRoad && s.rt.nearRoad[i] >= 0) { const d = s.rt.shopDist[i]; c = d > SHOP_RANGE ? [220, 50, 40] : grad(d / SHOP_RANGE, [[60, 190, 70], [150, 210, 60], [240, 200, 40], [240, 120, 40]]); a = d > SHOP_RANGE ? 120 : 150; } break;
         case 'crime': if (s.crimeMap[i] > 0.02) { c = grad(s.crimeMap[i], GR); a = 170; } break;
         case 'resources': if (s.res[i]) { const r = RESOURCES[s.res[i]].color; c = [r[0] * 255, r[1] * 255, r[2] * 255]; a = 170; } break;
         case 'groundwater': if (!s.water[i]) { c = grad(s.gw[i], BLUE); a = 150; } break;
@@ -131,6 +134,12 @@ export function buildingTint(s, view) {
     case 'death': return (b) => ((b.dead || 0) > 0 ? 0xe03030 : 0x888888);
     case 'level': return (b) => (b.kind === 'zone' ? [0, 0xa0a0a0, 0x60b0e0, 0x50c060, 0xe0c040, 0xe05030][b.level] : 0x888888);
     case 'zones': return (b) => (b.kind === 'zone' ? parseInt(ZONES[b.type].color.slice(1), 16) : 0x888888);
+    case 'shop': return (b) => {
+      if (b.kind === 'zone' && ZONES[b.type].group === 'C') return b.probIcon === '📉' ? 0xe08030 : 0x3a80e0;
+      if (residents(b) <= 0 && !(b.kind === 'zone' && ZONES[b.type].group === 'R')) return 0x888888;
+      const d = s.rt.shopDist ? Math.min(s.rt.shopDist[b.x + b.z * N], b.access >= 0 ? s.rt.shopDist[b.access] : 999) : 0;
+      return d > SHOP_RANGE ? 0xe03030 : toHex(grad(d / SHOP_RANGE, [[60, 190, 70], [240, 200, 40]]));
+    };
     case 'landvalue': return (b) => toHex(grad(s.lv[b.x + b.z * N] / 100, [[60, 60, 200], [60, 200, 80], [250, 230, 60], [240, 80, 40]]));
     default: return () => 0x9a9a9a;
   }
@@ -138,6 +147,7 @@ export function buildingTint(s, view) {
 
 export function roadTint(s, view) {
   if (view === 'traffic') return (i) => toHex(grad(s.traffic[i] / ROADS[s.road[i]].cap, [[60, 200, 80], [240, 210, 40], [230, 50, 30]]));
+  if (view === 'shop' && s.rt.shopDist) return (i) => { const d = s.rt.shopDist[i]; return d > SHOP_RANGE ? 0xc03a30 : toHex(grad(d / SHOP_RANGE, [[60, 190, 70], [240, 200, 40]])); };
   if (view === 'transit') return (i) => (s.road[i] === 5 ? 0x3a70c0 : null);
   return null;
 }

@@ -5,6 +5,8 @@ import { SERVICES } from '../data/services.js';
 import { ROADS, ROAD_UPGRADES, NETWORKS } from '../data/roads.js';
 import { POLICIES, MILESTONES } from '../data/progression.js';
 import { jobCap, bGroup } from './buildings.js';
+import { shopCustRel } from './coverage.js';
+import { SHOP_FAR_SHARE, SHOP_DEMAND_K, SHOP_DEMAND_MAX } from '../data/balance.js';
 
 export const WAGES = [90, 140, 200, 290, 420];
 const PROFIT = { C: 62, I: 55, O: 85, R: 62 };
@@ -27,7 +29,8 @@ export function computeRates(s) {
     const g = bGroup(b); const jc = jobCap(b); if (!jc) continue;
     const lvl = 1 + (b.level - 1) * 0.15;
     if (b.kind === 'svc' && !SERVICES[b.type].sig) continue;
-    if (g === 'C' || (g === 'R' && b.kind === 'zone' && ZONES[b.type].jobs)) { com += b.emp * PROFIT.C * lvl * cr; comJobs += jc; comEmp += b.emp; }
+    // yerel müşteri havzası: konutlardan uzak dükkânlar daha az kazanır
+    if (g === 'C' || (g === 'R' && b.kind === 'zone' && ZONES[b.type].jobs)) { com += b.emp * PROFIT.C * lvl * cr * clamp(0.6 + 0.4 * shopCustRel(s, b), 0.4, 1.2); comJobs += jc; comEmp += b.emp; }
     else if (g === 'I') { ind += b.emp * PROFIT.I * lvl * trade * (s.policies.pollution_mgmt ? 0.92 : 1); indJobs += jc; }
     else if (g === 'O') { off += b.emp * PROFIT.O * lvl; offJobs += jc; }
   }
@@ -114,8 +117,15 @@ export function computeDemand(s) {
   // ticari
   const consumers = pop + tourists * 0.6;
   const comCapacity = jb.comJobs * 9;
-  s.rt.customerRatio = comCapacity > 0 ? consumers / comCapacity : 2;
+  // yakında marketi olmayan sakinler uzağa gitmez: kaybedilen alışveriş ticari geliri düşürür
+  const unserved = Math.min(pop, s.rt.shopUnserved || 0);
+  const shoppers = consumers - unserved * (1 - SHOP_FAR_SHARE);
+  s.rt.customerRatio = comCapacity > 0 ? shoppers / comCapacity : 2;
   let C = (consumers * 0.11 - jb.comJobs) / Math.max(25, consumers * 0.11) * 1.1 - (s.taxes.com - 10) * 0.05 + Math.min(0.25, tourists / 6000);
+  // yerel talep: marketsiz mahalleler yeni dükkân ister
+  const comLocal = unserved > 15 ? Math.min(SHOP_DEMAND_MAX, unserved / Math.max(80, pop) * SHOP_DEMAND_K) : 0;
+  s.rt.comLocalDemand = comLocal;
+  C += comLocal;
   // sanayi
   const goodsNeed = pop * 0.09 + jb.comJobs * 0.55 + 20;
   let I = 0.25 + (goodsNeed - jb.indJobs) / Math.max(20, goodsNeed) * 0.75 - (s.taxes.ind - 10) * 0.05 + (s.rt.tradeBonus || 0) * 0.3;

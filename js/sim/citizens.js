@@ -3,7 +3,8 @@ import { idx, clamp } from '../core/constants.js';
 import { ZONES, JOB_EDU } from '../data/zones.js';
 import { SERVICES } from '../data/services.js';
 import { hhCap, jobCap, residents, bGroup, svcStats } from './buildings.js';
-import { bCov } from './coverage.js';
+import { bCov, shopDistOf } from './coverage.js';
+import { POL_GROUND_W, POL_WARN, POL_HAPPY_K, POL_HAPPY_MAX, SHOP_RANGE, SHOP_NEAR, SHOP_HAPPY_PEN, SHOP_GRACE_MONTHS } from '../data/balance.js';
 
 const IMMIGRANT_EDU = [0.3, 0.35, 0.22, 0.1, 0.03];
 
@@ -145,6 +146,9 @@ export function buildingServices(s) {
   const crimeCity = 1 + (s.rt.cityEffect.crime || 0) + (s.policies.prerelease ? 0.1 : 0);
   const unemp = s.stats.unemployment || 0;
   let sickT = 0, popT = 0, crimeT = 0, happyT = 0, healthCovT = 0, nRes = 0;
+  // fabrika kirliliği şikayetleri ve alışveriş erişimi sayaçları
+  let polHH = 0, polBld = 0, noShopRes = 0, noShopHH = 0, noShopBld = 0;
+  const haveShopMap = !!s.rt.shopDist;
   const pollutedWaterHit = [];
   for (const id in s.buildings) {
     const b = s.buildings[id];
@@ -181,6 +185,15 @@ export function buildingServices(s) {
     crimeT += b.crime * Math.max(1, r);
     // mutluluk (konut)
     if (r > 0) {
+      // hava/toprak kirliliği maruziyeti (sanayi ve kirletici tesisler)
+      b._polExp = s.polA[i] + s.polG[i] * POL_GROUND_W;
+      if (b._polExp > POL_WARN) { polHH += b.hh; polBld++; }
+      // en yakın dükkâna yol mesafesi
+      b._shopD = haveShopMap ? shopDistOf(s, b) : 0;
+      if (b._shopD > SHOP_RANGE) {
+        noShopRes += r;
+        if (s.time.monthsElapsed - (b.born || 0) >= SHOP_GRACE_MONTHS) { noShopHH += b.hh; noShopBld++; }
+      }
       const h = happinessOf(s, b, i);
       b.happy = b.happy + (h - b.happy) * 0.25;
       happyT += b.happy * r; nRes++;
@@ -195,6 +208,9 @@ export function buildingServices(s) {
   s.stats.crimeRate = popT > 0 ? crimeT / Math.max(1, popT) : 0;
   s.stats.happiness = popT > 0 ? happyT / popT : 60;
   s.stats.deadWaiting = deadWaiting;
+  s.rt.polComplainHH = polHH; s.rt.polComplainBld = polBld;
+  s.rt.shopUnserved = noShopRes; s.rt.noShopHH = noShopHH; s.rt.noShopBld = noShopBld;
+  s.stats.noShopRes = Math.round(noShopRes);
   // küresel oranlar (kapasite / talep)
   const pop = Math.max(1, s.stats.pop || 0);
   s.rt.ratio = {
@@ -232,6 +248,13 @@ export function happinessOf(s, b, i) {
   h -= b.garbage > 60 ? 10 : b.garbage > 30 ? 4 : 0;
   h -= (b.dead || 0) > 0 ? 8 : 0;
   h -= s.polG[i] * 16 + s.polA[i] * 14 + s.polN[i] * 10;
+  // fabrikaların yanında yaşamak: eşik üstü ek ceza (şikayet)
+  const pe = b._polExp ?? (s.polA[i] + s.polG[i] * POL_GROUND_W);
+  if (pe > POL_WARN) h -= Math.min(POL_HAPPY_MAX, (pe - POL_WARN) * POL_HAPPY_K);
+  // yakında market yoksa sakinler alışverişe gidemez
+  const sd = b._shopD || 0;
+  if (sd > SHOP_RANGE) h -= SHOP_HAPPY_PEN;
+  else if (sd > SHOP_RANGE * SHOP_NEAR) h -= (sd - SHOP_RANGE * SHOP_NEAR) / (SHOP_RANGE * (1 - SHOP_NEAR)) * SHOP_HAPPY_PEN * 0.4;
   h -= (b.crime || 0) * 0.12;
   h -= (b.sick || 0) * 40;
   h += (10 - s.taxes.res) * 1.4;

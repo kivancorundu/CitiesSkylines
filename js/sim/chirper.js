@@ -4,6 +4,7 @@ import { MILESTONES } from '../data/progression.js';
 import { MONTHS } from '../core/constants.js';
 import { pick } from '../core/rng.js';
 import { residents } from './buildings.js';
+import { CUST_WARN_TICKS } from '../data/balance.js';
 
 export function chirp(s, key, vars = {}) {
   const arr = CHIRPS[key]; if (!arr) return;
@@ -36,6 +37,11 @@ export function chirperMonthly(s) {
   if (st.crimeRate > 30 && cool(s, 'crime', 4)) chirp(s, 'crime');
   if (st.sickRate > 0.08 && cool(s, 'sick', 4)) chirp(s, 'sick');
   if (st.trafficFlow < 55 && cool(s, 'traffic', 5)) chirp(s, 'traffic');
+  // fabrika kirliliği ve alışveriş erişimi şikayetleri
+  const polHH = s.rt.polComplainHH || 0, noShopHH = s.rt.noShopHH || 0;
+  if (polHH >= 3 && cool(s, 'factorySmoke', 4)) chirp(s, 'factorySmoke', { n: polHH });
+  if (noShopHH >= 5 && cool(s, 'noShop', 5)) chirp(s, 'noShop', { n: noShopHH });
+  if (shopsWithoutCustomers(s) && cool(s, 'noCustomers', 8)) chirp(s, 'noCustomers');
   if (st.unemployment > 0.12 && cool(s, 'noJobs', 4)) chirp(s, 'noJobs');
   if (st.vacancy > 0.35 && pop > 300 && cool(s, 'workers', 5)) chirp(s, 'workers');
   if (s.taxes.res > 14 && cool(s, 'taxesHigh', 5)) chirp(s, 'taxesHigh');
@@ -47,6 +53,11 @@ export function chirperMonthly(s) {
   if (s.money < 0 && cool(s, 'bankrupt', 3)) chirp(s, 'bankrupt');
   if (s.time.month === 0 && s.weather.snow > 0.2 && cool(s, 'winter', 10)) chirp(s, 'winter');
   if (s.time.month === 6 && cool(s, 'summer', 10)) chirp(s, 'summer');
+}
+
+function shopsWithoutCustomers(s) {
+  for (const id in s.buildings) { const b = s.buildings[id]; if ((b._lowCust || 0) > CUST_WARN_TICKS && !b.abandoned) return true; }
+  return false;
 }
 
 export function chirpEvent(s, e) {

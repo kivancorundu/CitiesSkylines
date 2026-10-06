@@ -4,8 +4,9 @@ import { ZONES } from '../data/zones.js';
 import { SERVICES } from '../data/services.js';
 import { ROADS } from '../data/roads.js';
 import { jobCap } from './buildings.js';
+import { POL_GROUND_W, POL_WARN } from '../data/balance.js';
 
-function boxBlur(src, dst, r, tmp) {
+export function boxBlur(src, dst, r, tmp) {
   // ayrılabilir kutu bulanıklaştırma
   for (let z = 0; z < N; z++) {
     let acc = 0; const row = z * N;
@@ -47,7 +48,7 @@ export function updatePollution(s) {
     const b = s.buildings[id];
     if (b.built < 1 || b.abandoned || b.collapsed) continue;
     if (b.kind === 'zone') {
-      const z = ZONES[b.type]; const area = b.sx * b.sz; const st = b.staffing ?? 1;
+      const z = ZONES[b.type]; const area = b.sx * b.sz; const st = 0.5 + 0.5 * (b.staffing ?? 1); // az çalışanlı fabrika da kirletir
       if (z.group === 'I') {
         let g = 0.25, a = 0.35, n = 0.25;
         if (z.key === 'oil') { g = 0.45; a = 0.25; }
@@ -139,6 +140,9 @@ export function updateLandValue(s) {
       + 18 * c.park[i] + 6 * c.telecom[i] + 4 * c.post[i] + 10 * c.transit[i] + 3 * c.welfare[i]
       + Math.max(0, 8 - wd[i]) * 1.6 + Math.min(14, out[i] * 6)
       - 28 * s.polG[i] - 16 * s.polA[i] - 12 * s.polN[i] - 10 * s.crimeMap[i];
+    // fabrikaların dibindeki arazi: eşik üstü kirlilik değeri ayrıca düşürür
+    const pe = s.polA[i] + s.polG[i] * POL_GROUND_W;
+    if (pe > POL_WARN) v -= Math.min(20, (pe - POL_WARN) * 30);
     if (s.road[i] === 7) v += 8;
     if (s.roadUp[i] & 1) v += 4;
     if (s.roadUp[i] & 2) v += 2;

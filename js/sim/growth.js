@@ -6,6 +6,8 @@ import { SERVICES } from '../data/services.js';
 import { makeBuilding, removeBuilding, hhCap } from './buildings.js';
 import { accessCell } from './network.js';
 import { shuffle } from './util.js';
+import { shopCustRel, shopDistOf, shopIsolated } from './coverage.js';
+import { POL_GROUND_W, POL_WARN, POL_SEVERE, NOISE_WARN, SHOP_RANGE, SHOP_GRACE_MONTHS, CUST_WARN_TICKS, CUST_ISSUE_TICKS } from '../data/balance.js';
 
 // İmar edilebilir hücreler: zonable yollardan en fazla 6 hücre derinliğe kadar
 export function computeZonable(s) {
@@ -135,6 +137,8 @@ export function growthTick(s) {
       if (b.hh < cap && b.connected && Math.random() < 0.03 + 0.25 * Math.max(0, resD) * (b.happy / 70)) b.hh++;
       else if (b.hh > cap) b.hh = cap;
       if (b.hh > 0 && b.happy < 25 && Math.random() < 0.004) b.hh--;
+      // ağır fabrika kirliliğinde sakinler taşınır
+      if (b.hh > 0 && (b._polExp || 0) > POL_SEVERE && Math.random() < 0.005) b.hh--;
     }
   }
 }
@@ -155,7 +159,7 @@ export function growthSlow(s) {
       continue;
     }
     // sorunlar
-    let issues = 0, why = [];
+    let issues = 0, why = [], icon = '';
     if (!b.power) { issues++; why.push('Elektrik yok'); }
     if (!b.water) { issues++; why.push('Su yok'); }
     if (!b.sewage) { issues++; why.push('Kanalizasyon yok'); }
@@ -166,7 +170,25 @@ export function growthSlow(s) {
     if (z.group === 'R' && b.happy < 22) { issues++; why.push('Çok mutsuz'); }
     if (z.group !== 'R' && b.staffing < 0.25 && s.time.monthsElapsed - b.born > 3) { issues++; why.push('Çalışan yok'); }
     if (z.group === 'C' && s.rt.customerRatio < 0.35) { issues++; why.push('Müşteri yok'); }
+    if (z.group === 'R') {
+      // fabrikaların yanındaki evler kirlilikten şikayet eder
+      const ci = idx(b.x, b.z), pe = s.polA[ci] + s.polG[ci] * POL_GROUND_W;
+      if (pe > POL_WARN) { why.push('Hava kirliliği: sakinler fabrikalardan şikayetçi'); icon = '😷'; if (pe > POL_SEVERE) issues++; }
+      else if (s.polN[ci] > NOISE_WARN) { why.push('Gürültü kirliliği: sakinler uyuyamıyor'); icon = '🔊'; }
+      // yakında market yok: sakinler uzağa alışverişe gitmez
+      if (shopDistOf(s, b) > SHOP_RANGE && s.time.monthsElapsed - (b.born || 0) >= SHOP_GRACE_MONTHS) { why.push('Yakında market yok'); if (!icon) icon = '🛒'; }
+    }
+    // çevresinde konut olmayan dükkân: uzun süre müşterisiz kalırsa kapanabilir
+    if (z.group === 'C' && b._custLocal !== undefined) {
+      if (shopIsolated(s, b)) b._lowCust = (b._lowCust || 0) + 1; else b._lowCust = Math.max(0, (b._lowCust || 0) - 3);
+      if (b._lowCust > CUST_WARN_TICKS && s.time.monthsElapsed - b.born > 3) {
+        if (!why.includes('Müşteri yok')) why.push('Müşteri yok: yakında konut az');
+        if (!icon) icon = '📉';
+        if (b._lowCust > CUST_ISSUE_TICKS) issues++;
+      }
+    }
     b.probWhy = why.join(', ');
+    b.probIcon = icon;
     if (issues) b.prob += issues; else b.prob = Math.max(0, b.prob - 2);
     if (b.prob > 160) {
       b.abandoned = s.time.monthsElapsed || 1; b.hh = 0; b.emp = 0; b.prob = 0;
@@ -179,7 +201,7 @@ export function growthSlow(s) {
       const lv = s.lv[idx(b.x, b.z)];
       let p = 0;
       if (z.group === 'R') p = (lv - 10 - b.level * 10) / 60 + (b.happy - 45 - b.level * 4) / 80;
-      else if (z.group === 'C') p = (lv - 10 - b.level * 10) / 60 + (b.staffing - 0.7) + (s.rt.customerRatio - 0.8) * 0.5;
+      else if (z.group === 'C') p = (lv - 10 - b.level * 10) / 60 + (b.staffing - 0.7) + (s.rt.customerRatio * Math.min(1.2, shopCustRel(s, b)) - 0.8) * 0.5;
       else if (z.group === 'O') p = (lv - 15 - b.level * 10) / 60 + (b.staffing - 0.7) + (s.cov.telecom[idx(b.x, b.z)] - 0.3) * 0.5;
       else p = (b.staffing - 0.65) + (s.rt.eduAvg - 0.6 - b.level * 0.15) * 0.8;
       if (s.policies.high_tech_housing && z.group === 'R') p += 0.1;

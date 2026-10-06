@@ -283,5 +283,6 @@ export function problemIcon(s, b) {
   if ((b.sick || 0) > 0.15) return '🤒';
   if ((b.crime || 0) > 70) return '🚨';
   if (b.kind === 'zone' && b.staffing !== undefined && b.staffing < 0.3 && b.emp !== undefined && s.time.monthsElapsed - b.born > 2 && b.type >= 7) return '👷';
+  if (b.probIcon) return b.probIcon;
   return null;
 }

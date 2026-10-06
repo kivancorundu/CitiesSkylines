@@ -2,6 +2,7 @@
 import { N, idx, inB, clamp } from '../core/constants.js';
 import { SERVICES } from '../data/services.js';
 import { ROADS } from '../data/roads.js';
+import { SHOP_RANGE, SHOP_FAR_SHARE } from '../data/balance.js';
 import { findPath, footprint, perimeter } from './network.js';
 import { residents, jobCap } from './buildings.js';
 
@@ -144,7 +145,12 @@ export function trafficTick(s) {
       a = pickW(tw.inds, tw.iw, tw.it); b = { access: s.rt.outsideRoad ?? -1 }; kind = 'truck';
     } else {
       a = pickW(tw.homes, tw.hw, tw.ht);
-      b = r < 0.6 ? pickW(tw.works, tw.ww, tw.wt) : pickW(tw.shops, tw.sw, tw.st);
+      if (r < 0.6) b = pickW(tw.works, tw.ww, tw.wt);
+      else {
+        // alışveriş: menzil içindeki en yakın dükkân tercih edilir; menzilde dükkân yoksa yolculuk yapılmaz
+        b = a ? shopFor(s, a, tw) : null;
+        if (b === false) continue;
+      }
       if (!b) b = pickW(tw.works, tw.ww, tw.wt);
       if (!b && Math.random() < 0.5) b = { access: s.rt.outsideRoad ?? -1 };
     }
@@ -159,6 +165,20 @@ export function trafficTick(s) {
   if (nOk) s.rt.avgTrip = (s.rt.avgTrip || 10) * 0.95 + (costSum / nOk) * 0.05;
 }
 function t_add(s, c, w) { s.traffic[c] += w; }
+
+// Evden alışveriş hedefi: false = menzilde dükkân yok (yolculuk kaybedilir)
+function shopFor(s, home, tw) {
+  const sd = s.rt.shopDist, sn = s.rt.shopNear;
+  if (!sd || home.access < 0 || !tw.shops.length) return pickW(tw.shops, tw.sw, tw.st);
+  if (sd[home.access] > SHOP_RANGE) return Math.random() < SHOP_FAR_SHARE ? pickW(tw.shops, tw.sw, tw.st) : false;
+  const near = s.buildings[sn[home.access]];
+  // biraz çeşitlilik: rastgele bir dükkân menzil içindeyse (kuş uçuşu) ona da gidilebilir
+  if (Math.random() < 0.3) {
+    const c = pickW(tw.shops, tw.sw, tw.st);
+    if (c && c.access >= 0 && Math.abs((c.access % N) - (home.access % N)) + Math.abs(((c.access / N) | 0) - ((home.access / N) | 0)) <= SHOP_RANGE * 0.8) return c;
+  }
+  return near && near.access >= 0 ? near : pickW(tw.shops, tw.sw, tw.st);
+}
 
 export function trafficStats(s) {
   let load = 0, n = 0;

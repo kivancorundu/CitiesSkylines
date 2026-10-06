@@ -1,8 +1,11 @@
 // Hizmet kapsama alanları (yol mesafesine göre, CS2'deki gibi araçlar yol ağıyla ulaşır)
-import { N, DIRS, idx, inB } from '../core/constants.js';
+import { N, DIRS, idx, inB, eachRoadNbr, SQRT2, clamp } from '../core/constants.js';
 import { SERVICES } from '../data/services.js';
-import { roadDistances, perimeter } from './network.js';
-import { svcStats, residents, jobCap } from './buildings.js';
+import { ZONES } from '../data/zones.js';
+import { SHOP_RANGE, CUST_R, CUST_LOW, CUST_REL_LOW } from '../data/balance.js';
+import { roadDistances, perimeter, MinHeap } from './network.js';
+import { svcStats, residents, jobCap, bGroup } from './buildings.js';
+import { boxBlur } from './environment.js';
 
 const SPREAD = 6;
 
@@ -121,4 +124,83 @@ export function computeNearRoad(s) {
     }
     q = nq;
   }
+}
+
+// ---------- Alışveriş erişimi (CS2: ticari bölgeler, vatandaşlar uzağa alışverişe gitmez) ----------
+export const NO_SHOP = 999;
+
+// Dükkân sayılan binalar: ticari bölgeler, karma konutların zemin kat dükkânları, ticari imza binaları
+export function isShop(b) {
+  if (b.built < 1 || b.abandoned || b.collapsed) return false;
+  if (b.kind === 'zone') { const z = ZONES[b.type]; return z.group === 'C' || (z.group === 'R' && !!z.jobs); }
+  return bGroup(b) === 'C';
+}
+
+// Ticari binalardan yol ağı üzerinde çok kaynaklı Dijkstra: s.rt.shopDist (hücre), s.rt.shopNear (en yakın dükkân id)
+// Ayrıca her dükkânın yerel müşteri havzası (kutu bulanıklaştırma, binadan bağımsız maliyet)
+export function computeShopAccess(s) {
+  const C = N * N, rt = s.rt;
+  const sd = rt.shopDist || (rt.shopDist = new Float32Array(C));
+  const sn = rt.shopNear || (rt.shopNear = new Int32Array(C));
+  const done = rt.shopDone || (rt.shopDone = new Uint8Array(C));
+  const resM = rt.custRes || (rt.custRes = new Float32Array(C)), jobM = rt.custJobs || (rt.custJobs = new Float32Array(C));
+  sd.fill(NO_SHOP); sn.fill(-1); done.fill(0); resM.fill(0); jobM.fill(0);
+  const heap = new MinHeap(); const maxD = SHOP_RANGE * 1.5;
+  const shops = []; let resT = 0, jobT = 0;
+  for (const id in s.buildings) {
+    const b = s.buildings[id];
+    const r = residents(b); if (r > 0) { resM[idx(b.x, b.z)] += r; resT += r; }
+    if (!isShop(b)) continue;
+    const j = jobCap(b); jobM[idx(b.x, b.z)] += j; jobT += j;
+    shops.push(b);
+    for (const c of perimeter(b)) if (s.road[c] && !s.rElev[c] && sd[c] > 0) { sd[c] = 0; sn[c] = b.id; heap.push(0, c); }
+  }
+  while (heap.size) {
+    const i = heap.pop(); if (done[i]) continue; done[i] = 1;
+    const d = sd[i], lbl = sn[i];
+    eachRoadNbr(s, i, (j, k, diag) => {
+      if (!s.road[j] || done[j]) return;
+      const nd = d + (s.road[j] === 6 ? 0.7 : 1) * (diag ? SQRT2 : 1);
+      if (nd < sd[j] && nd <= maxD) { sd[j] = nd; sn[j] = lbl; heap.push(nd, j); }
+    });
+  }
+  // yol dışı hücrelere en yakın yoldan yay
+  if (!rt.nearRoad) computeNearRoad(s);
+  const nr = rt.nearRoad, nd = rt.nearRoadD;
+  for (let i = 0; i < C; i++) {
+    if (s.road[i]) continue; const r = nr[i];
+    if (r >= 0 && sd[r] < NO_SHOP) { sd[i] = sd[r] + nd[i]; sn[i] = sn[r]; }
+  }
+  // yerel müşteri havzası: çevredeki sakinler / çevredeki ticari iş kapasitesi
+  const tmp = rt.blurTmp || (rt.blurTmp = new Float32Array(C));
+  const oR = rt.custResB || (rt.custResB = new Float32Array(C)), oJ = rt.custJobsB || (rt.custJobsB = new Float32Array(C));
+  boxBlur(resM, oR, CUST_R, tmp); boxBlur(jobM, oJ, CUST_R, tmp);
+  let wSum = 0, wl = 0;
+  for (const b of shops) {
+    const i = idx(b.x, b.z); b._custLocal = oJ[i] > 1e-6 ? oR[i] / (oJ[i] * 9) : 2;
+    const j = jobCap(b); wSum += j; wl += j * Math.min(2, b._custLocal);
+  }
+  // iş kapasitesine göre ağırlıklı ortalama: gelir etkisi dükkânlar arasında yeniden dağılır, toplamı değişmez
+  const mean = wSum > 0 ? wl / wSum : 1;
+  for (const b of shops) b._custRel = mean > 1e-6 ? clamp(Math.min(2, b._custLocal) / mean, 0, 1.6) : 1;
+  rt.custGlobal = jobT > 0 ? resT / (jobT * 9) : 2;
+  rt.shopCount = shops.length;
+  rt.dirty.overlay = true;
+}
+
+// Dükkânın yerel müşteri oranının dükkân ortalamasına göre katsayısı (1 = ortalama)
+export function shopCustRel(s, b) { return b._custRel ?? 1; }
+
+// Çevresinde konut olmayan dükkân: yerel müşteri oranı hem mutlak olarak hem de şehir geneline göre çok düşük
+export function shopIsolated(s, b) {
+  if (b._custLocal === undefined) return false;
+  return b._custLocal < CUST_LOW && b._custLocal < (s.rt.custGlobal ?? 1) * CUST_REL_LOW;
+}
+
+// Binanın en yakın dükkâna yol mesafesi (erişim hücresinden)
+export function shopDistOf(s, b) {
+  const sd = s.rt.shopDist; if (!sd) return 0;
+  const a = b.access ?? -1;
+  const d0 = sd[idx(b.x, b.z)];
+  return a >= 0 ? Math.min(sd[a], d0) : d0;
 }
