@@ -1,0 +1,12 @@
+{
+  "name": "sehir-kurucu-2",
+  "version": "1.0.0",
+  "description": "Cities: Skylines II'den esinlenen tarayıcı tabanlı 3D şehir kurma oyunu",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.cjs",
+    "test": "node tests/sim.test.mjs 12 && node tests/bot.mjs 36"
+  },
+  "license": "MIT"
+}

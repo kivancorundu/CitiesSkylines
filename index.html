@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Şehir Kurucu II</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="topbar" class="ui">
+    <div class="tb-left">
+      <button id="btn-menu" class="tbtn" title="Ana Menü (Esc)">☰</button>
+      <button data-panel="info" class="tbtn" title="Bilgi Görünümleri (I)">📊</button>
+      <button data-panel="econ" class="tbtn" title="Ekonomi (B)">💰</button>
+      <button data-panel="prog" class="tbtn" title="İlerleme ve Gelişim Ağacı (P)">🏆</button>
+      <button data-panel="stats" class="tbtn" title="İstatistikler">📈</button>
+      <button data-panel="policies" class="tbtn" title="Politikalar">📜</button>
+      <button data-panel="districts" class="tbtn" title="İlçeler">🗺️</button>
+      <button data-panel="transit" class="tbtn" title="Ulaşım Genel Bakış">🚌</button>
+      <button data-panel="prod" class="tbtn" title="Üretim">🏭</button>
+      <button data-panel="life" class="tbtn" title="Yaşam Yolu">👤</button>
+      <button data-panel="chirper" class="tbtn" title="Chirper"><span>🐦</span><i id="chirp-dot"></i></button>
+    </div>
+    <div class="tb-center" id="city-name"></div>
+    <div class="tb-right">
+      <div id="milestone">
+        <div class="ms-name" id="ms-name"></div>
+        <div class="xpbar"><div id="xp-fill"></div></div>
+        <div class="ms-xp" id="ms-xp"></div>
+      </div>
+      <div id="devpts" title="Gelişim Puanı">◆ 0</div>
+    </div>
+  </div>
+
+  <div id="bottombar" class="ui">
+    <div class="bb-stats">
+      <div class="stat" title="Nüfus"><span>👥</span><b id="st-pop">0</b></div>
+      <div class="stat" title="Para / Aylık bakiye"><span>💰</span><b id="st-money">0</b><small id="st-net"></small></div>
+      <div class="stat" title="Mutluluk"><span id="st-happy-ico">🙂</span><b id="st-happy">0</b></div>
+      <div class="stat" title="Hava durumu"><span id="st-weather">☀️</span><b id="st-temp">0°</b></div>
+    </div>
+    <div class="bb-demand" title="Talep: Konut / Ticari / Sanayi / Ofis">
+      <div class="dem"><div class="dbar"><div id="d-r" class="dfill r"></div></div><span>K</span></div>
+      <div class="dem"><div class="dbar"><div id="d-c" class="dfill c"></div></div><span>T</span></div>
+      <div class="dem"><div class="dbar"><div id="d-i" class="dfill i"></div></div><span>S</span></div>
+      <div class="dem"><div class="dbar"><div id="d-o" class="dfill o"></div></div><span>O</span></div>
+    </div>
+    <div class="bb-time">
+      <div id="date"></div>
+      <div class="speeds">
+        <button data-speed="0" title="Duraklat (Boşluk)">⏸</button>
+        <button data-speed="1" title="Normal (1)">▶</button>
+        <button data-speed="2" title="Hızlı (2)">▶▶</button>
+        <button data-speed="3" title="Çok hızlı (3)">▶▶▶</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toolbar" class="ui"></div>
+  <div id="flyout" class="ui hidden"></div>
+  <div id="panel" class="ui hidden"></div>
+  <div id="inspector" class="ui hidden"></div>
+  <div id="hint" class="hidden"></div>
+  <div id="cursorinfo" class="hidden"></div>
+  <div id="tooltip" class="hidden"></div>
+  <div id="toasts"></div>
+  <div id="banner" class="hidden"></div>
+  <div id="modal" class="hidden"></div>
+  <div id="loading">Şehir Kurucu II yükleniyor…</div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
