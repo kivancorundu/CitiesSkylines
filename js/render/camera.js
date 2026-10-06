@@ -1,6 +1,7 @@
 // CS2 tarzı serbest 3D kamera: WASD kaydırma, Q/E döndürme, R/F eğim, tekerlek yakınlaştırma, sağ tık sürükle döndür/eğ,
 // orta tık sürükle kaydır, V ile görünüm ön ayarları (kuşbakışı → klasik → alçak açı → sokak görünümü)
 import * as THREE from '../vendor/three.module.min.js';
+import { toLayout, layoutW, layoutH } from '../core/screen.js';
 import { HALF, clamp, heightAt } from '../core/constants.js';
 
 export const PITCH_MIN = 0.04, PITCH_MAX = 1.52, DIST_MIN = 9, DIST_MAX = 1900;
@@ -23,13 +24,14 @@ export class CameraController {
     this.mouse = { x: 0, y: 0, inside: false };
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
     dom.addEventListener('mousedown', (e) => {
-      if (e.button === 2 || e.button === 1) { this.drag = { b: e.button, x: e.clientX, y: e.clientY, moved: 0 }; }
+      if (e.button === 2 || e.button === 1) { const [x, y] = toLayout(e.clientX, e.clientY); this.drag = { b: e.button, x, y, moved: 0 }; }
     });
     window.addEventListener('mousemove', (e) => {
-      this.mouse.x = e.clientX; this.mouse.y = e.clientY;
+      const [mx, my] = toLayout(e.clientX, e.clientY);
+      this.mouse.x = mx; this.mouse.y = my;
       if (!this.drag) return;
-      const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
-      this.drag.x = e.clientX; this.drag.y = e.clientY; this.drag.moved += Math.abs(dx) + Math.abs(dy);
+      const dx = mx - this.drag.x, dy = my - this.drag.y;
+      this.drag.x = mx; this.drag.y = my; this.drag.moved += Math.abs(dx) + Math.abs(dy);
       const mo = this.mouseOpts || {};
       if (this.drag.b === 2) { this.tYaw -= dx * 0.005 * (mo.rotSens || 1) * (mo.invertX ? -1 : 1); this.tPitch = clamp(this.tPitch + dy * 0.004 * (mo.rotSens || 1) * (mo.invertY ? -1 : 1), PITCH_MIN, PITCH_MAX); }
       else this.panScreen(-dx * (mo.panSens || 1), -dy * (mo.panSens || 1));
@@ -76,7 +78,7 @@ export class CameraController {
     if (on('panLeft', 'KeyA') || k.has('ArrowLeft')) px -= 1;
     if (on('panRight', 'KeyD') || k.has('ArrowRight')) px += 1;
     if (this.edgeScroll && this.mouse.inside && !this.drag) {
-      const m = 12, W = window.innerWidth, H = window.innerHeight;
+      const m = 12, W = layoutW(), H = layoutH();
       if (this.mouse.x < m) px -= 1; if (this.mouse.x > W - m) px += 1;
       if (this.mouse.y < m) pz -= 1; if (this.mouse.y > H - m) pz += 1;
     }

@@ -12,6 +12,7 @@ import { chainsFor, snapAngle, snapLength } from '../sim/roadtool.js';
 import { geomsFor, roadStretch, roadPath, samplesInCells } from '../sim/roadgeom.js';
 import { WIDTH as ROAD_W } from '../render/smoothroads.js';
 import { options } from '../core/options.js';
+import { toLayout } from '../core/screen.js';
 import { refreshRoads } from '../sim/simulation.js';
 
 export const ROAD_MODES = [
@@ -98,14 +99,15 @@ export class Tools {
 
   // ---------- işaretçi olayları (fare ve dokunmatik ortak) ----------
   onMove(e) {
-    this.mx = e.clientX; this.my = e.clientY; this.shift = !!e.shiftKey;
-    const p = this.g.renderer.pick(e.clientX, e.clientY);
+    const [lx, ly] = e.layout ? [e.clientX, e.clientY] : toLayout(e.clientX, e.clientY);
+    this.mx = lx; this.my = ly; this.shift = !!e.shiftKey;
+    const p = this.g.renderer.pick(lx, ly);
     const changed = !this.hover || !p || p.x !== this.hover.x || p.z !== this.hover.z;
     this.hover = p;
     if (this.mouseDown && p && ['district', 'terrain', 'trees'].includes(this.tool.type)) this.continuous();
     if (this.mouseDown && p && this.tool.type === 'zone' && this.o.zone.mode === 'brush') this.continuous();
     if (changed) this.refresh();
-    if (!this.g.touchMode) this.g.ui.cursor(e.clientX, e.clientY, this.cursorText);
+    if (!this.g.touchMode) this.g.ui.cursor(lx, ly, this.cursorText);
   }
 
   onDown(e) {

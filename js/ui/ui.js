@@ -10,6 +10,7 @@ import { WEATHER_ICONS, clockHour } from '../sim/weather.js';
 import { PANELS, inspectorHTML, bindInspector, roadInspectorHTML } from './panels.js';
 import { createDistrict } from '../sim/actions.js';
 import { renderToolPanels, updatePreview } from './toolpanels.js';
+import { toLayout, layoutW } from '../core/screen.js';
 import { options } from '../core/options.js';
 
 const $ = (id) => document.getElementById(id);
@@ -185,7 +186,7 @@ export class UI {
     $('st-weather').textContent = WEATHER_ICONS[s.weather.state]; const tu = options().gameplay.tempUnit; $('st-temp').textContent = (tu === 'F' ? Math.round(s.weather.temp * 1.8 + 32) + '°F' : Math.round(s.weather.temp) + '°C');
     const ck = clockHour(s); const hh = Math.floor(ck), mm = Math.floor((ck - hh) * 60);
     const c24 = options().interface.clock24; const hs = c24 ? String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0') : `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'ÖÖ' : 'ÖS'}`;
-    $('date').textContent = innerWidth <= 760 ? `${MONTHS[s.time.month].slice(0, 3)} ${s.time.year}` : `${hs} · ${MONTHS[s.time.month]} ${s.time.year}`;
+    $('date').textContent = layoutW() <= 760 || document.body.classList.contains('land') ? `${MONTHS[s.time.month].slice(0, 3)} ${s.time.year}` : `${hs} · ${MONTHS[s.time.month]} ${s.time.year}`;
     const D = s.demand;
     for (const [id, v] of [['d-r', Math.max(D.resLow, D.resMed, D.resHigh)], ['d-c', D.com], ['d-i', D.ind], ['d-o', s.milestone >= 4 ? D.off : -0.01]]) {
       const el = $(id); const val = clamp(v, -1, 1);
@@ -310,7 +311,7 @@ export class UI {
   toast(msg, kind = '') { const d = document.createElement('div'); d.className = 'toast ' + kind; d.textContent = msg; $('toasts').appendChild(d); setTimeout(() => d.remove(), 4000); while ($('toasts').children.length > 5) $('toasts').firstChild.remove(); }
   banner(html) { const b = $('banner'); b.innerHTML = html; b.classList.remove('hidden'); const ok = $('banner-ok'); if (ok) ok.addEventListener('click', () => b.classList.add('hidden')); setTimeout(() => b.classList.add('hidden'), 12000); }
   tip(html, e) { const t = $('tooltip'); if (!html) { t.classList.add('hidden'); return; } t.innerHTML = html; t.classList.remove('hidden'); this.placeTip(e); }
-  placeTip(e) { const t = $('tooltip'); const w = t.offsetWidth, h = t.offsetHeight; let x = e.clientX + 14, y = e.clientY - h - 10; if (x + w > innerWidth) x = innerWidth - w - 6; if (y < 4) y = e.clientY + 20; t.style.left = x + 'px'; t.style.top = y + 'px'; }
+  placeTip(e) { const t = $('tooltip'); const w = t.offsetWidth, h = t.offsetHeight; const [cx, cy] = toLayout(e.clientX, e.clientY); let x = cx + 14, y = cy - h - 10; if (x + w > layoutW()) x = layoutW() - w - 6; if (y < 4) y = cy + 20; t.style.left = x + 'px'; t.style.top = y + 'px'; }
 
   // Tarayıcı prompt/confirm yerine oyun içi küçük diyaloglar
   ask(title, value, cb) {

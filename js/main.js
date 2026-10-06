@@ -11,6 +11,7 @@ import { Tools } from './ui/tools.js';
 import { Menus } from './ui/menus.js';
 import { TouchControls } from './ui/touch.js';
 import { options, onOptions, setOption, IS_TOUCH } from './core/options.js';
+import { applyOrientation, lockLandscape } from './core/screen.js';
 import { buildDemoCity } from './core/demo.js';
 
 // Oyunun kendi adresi (GitHub deposundan doğrudan; GitHub Pages açılınca oradan da oynanabilir)
@@ -30,6 +31,11 @@ class Game {
     this.menus = new Menus(this);
     this.touch = new TouchControls(this);
     this.bindFullscreen();
+    // ekran yönü (telefonda zorla yatay)
+    this.orient = () => { applyOrientation(options().interface.orientation, IS_TOUCH || this.touchMode); this.renderer.resize(); };
+    window.addEventListener('resize', this.orient);
+    window.addEventListener('orientationchange', () => setTimeout(this.orient, 150));
+    this.orient();
     this.last = performance.now(); this.lastFrame = 0;
     this.autosaveT = 0;
     onOptions(() => this.applyOptions());
@@ -49,6 +55,7 @@ class Game {
     cam.edgeScroll = o.gameplay.edgeScroll; cam.speed = o.gameplay.camSpeed; cam.keys2 = o.keys; cam.mouseOpts = o.mouse;
     cam.onView = (v) => { if (!this.inMenu) this.ui.toast(`Kamera: ${v.name}`); };
     document.documentElement.style.setProperty('--ui-scale', o.interface.uiScale);
+    if (this.orient) this.orient();
     document.body.classList.toggle('no-tips', !o.interface.tooltips);
     document.body.classList.toggle('no-hints', !o.interface.hints);
     document.body.classList.toggle('cam-buttons', this.touchMode && o.touch.camButtons);
@@ -75,6 +82,7 @@ class Game {
     if (!req || !allowed) { if (!quiet) this.fullscreenHelp(embedded); return; }
     try {
       const p = req.call(el, { navigationUI: 'hide' });
+      if (p && p.then) p.then(() => { if (options().interface.orientation === 'landscape') lockLandscape(); }, () => {});
       if (p && p.catch) p.catch(() => { if (!quiet) this.fullscreenHelp(embedded); });
     } catch { if (!quiet) this.fullscreenHelp(embedded); }
   }

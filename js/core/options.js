@@ -13,7 +13,7 @@ export const DEFAULT_OPTIONS = {
   general: { autosave: true, autosaveMin: 10, tutorial: true, pauseOnBlur: false },
   graphics: { preset: IS_TOUCH ? 'low' : 'medium', ...GRAPHICS_PRESETS[IS_TOUCH ? 'low' : 'medium'], dayNight: true, weatherFx: true, antialias: !IS_TOUCH, fullscreen: false },
   gameplay: { edgeScroll: false, disasters: true, autoDemolish: true, tempUnit: 'C', camSpeed: 1, leftHand: false },
-  interface: { uiScale: IS_TOUCH ? 1 : 1, tooltips: true, clock24: true, icons: true, chirperToasts: true, hints: true },
+  interface: { uiScale: IS_TOUCH ? 1 : 1, orientation: 'landscape', tooltips: true, clock24: true, icons: true, chirperToasts: true, hints: true },
   audio: { master: 0.8, ui: 0.7, ambient: 0.4, mute: false },
   keys: {
     panUp: 'KeyW', panDown: 'KeyS', panLeft: 'KeyA', panRight: 'KeyD', rotLeft: 'KeyQ', rotRight: 'KeyE', tiltUp: 'KeyR', tiltDown: 'KeyF', zoomIn: 'Equal', zoomOut: 'Minus', camView: 'KeyV',

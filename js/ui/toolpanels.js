@@ -7,6 +7,7 @@ import { LINE_TYPES, hasDepot } from '../sim/transit.js';
 import { svcStats, residents } from '../sim/buildings.js';
 import { tileCost, allowedTiles, ownedTiles } from '../sim/progression.js';
 import { canUndo, createDistrict } from '../sim/actions.js';
+import { layoutW } from '../core/screen.js';
 import { ROAD_MODES, NET_MODES } from './tools.js';
 
 const $ = (id) => document.getElementById(id);
@@ -164,7 +165,7 @@ function act(ui, a) {
     case 'dsel': t.id = +v; break;
     case 'dnew': ui.ask('Yeni ilçenin adı', `İlçe ${ui.s.districts.length + 1}`, (n) => { const d = createDistrict(ui.s, n); if (d) { t.id = d.id; if (ui.cat === 'areas') ui.renderFlyout(); T.optionsChanged(); } }); return;
     case 'finish': T.finishLine(); break;
-    case 'toggleinfo': if (ui.g.touchMode || innerWidth <= 760) document.body.classList.toggle('show-info'); else ui.collapsedInfo = !ui.collapsedInfo; break;
+    case 'toggleinfo': if (ui.g.touchMode || layoutW() <= 760) document.body.classList.toggle('show-info'); else ui.collapsedInfo = !ui.collapsedInfo; break;
   }
   T.optionsChanged();
 }

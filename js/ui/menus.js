@@ -46,6 +46,7 @@ export const OPTION_TABS = [
   ] },
   { key: 'interface', name: 'Arayüz', icon: '🪟', rows: [
     sld('uiScale', 'Arayüz ölçeği', 0.7, 1.4, 0.05, pct, 'Menü ve panellerin boyutu.'),
+    sel('orientation', 'Ekran yönü (telefon)', [['landscape', 'Her zaman yatay'], ['auto', 'Cihazın yönünü izle']], 'Her zaman yatay: telefon dikey tutulsa veya otomatik döndürme kapalı olsa bile oyun yatay çizilir; telefonu yan çevirerek oynayın.'),
     tog('tooltips', 'Araç ipuçları', 'Öğelerin üzerine gelince açıklama göster.'),
     tog('clock24', '24 saat biçimi', ''),
     tog('icons', 'Bina sorun simgeleri', 'Binaların üzerindeki elektrik, su, çöp vb. uyarı simgeleri.'),

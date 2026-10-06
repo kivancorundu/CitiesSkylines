@@ -2,6 +2,7 @@
 // iki parmak birlikte yukarı/aşağı sürükle = kamera eğimi (3D perspektif)
 import { options } from '../core/options.js';
 import { clamp } from '../core/constants.js';
+import { toLayout } from '../core/screen.js';
 import { DIST_MIN, DIST_MAX } from '../render/camera.js';
 
 const DRAG_TOOLS = new Set(['road', 'net', 'upgrade', 'bulldoze', 'terrain', 'trees', 'district']);
@@ -18,7 +19,7 @@ export class TouchControls {
   }
   get T() { return this.g.tools; }
   get cam() { return this.g.renderer.cam; }
-  fake(t) { return { clientX: t.clientX, clientY: t.clientY, shiftKey: false }; }
+  fake(t) { const [x, y] = toLayout(t.clientX, t.clientY); return { clientX: x, clientY: y, shiftKey: false, layout: true }; }
 
   isDragTool() {
     const t = this.T.tool;
@@ -31,7 +32,7 @@ export class TouchControls {
     e.preventDefault();
     if (this.g.inMenu) return;
     this.g.touchMode = true; document.body.classList.add('touch');
-    for (const t of e.changedTouches) this.pts.set(t.identifier, { x: t.clientX, y: t.clientY, sx: t.clientX, sy: t.clientY, t0: performance.now() });
+    for (const t of e.changedTouches) { const [x, y] = toLayout(t.clientX, t.clientY); this.pts.set(t.identifier, { x, y, sx: x, sy: y, t0: performance.now() }); }
     if (this.pts.size === 1) {
       const t = e.changedTouches[0];
       this.mode = this.isDragTool() ? 'tool' : 'pan';
@@ -51,7 +52,7 @@ export class TouchControls {
   move(e) {
     e.preventDefault();
     if (this.g.inMenu) return;
-    for (const t of e.changedTouches) { const p = this.pts.get(t.identifier); if (p) { p.px = p.x; p.py = p.y; p.x = t.clientX; p.y = t.clientY; } }
+    for (const t of e.changedTouches) { const p = this.pts.get(t.identifier); if (p) { const [x, y] = toLayout(t.clientX, t.clientY); p.px = p.x; p.py = p.y; p.x = x; p.y = y; } }
     const o = options().touch;
     if (this.mode === 'tool' && this.pts.size === 1) { const t = e.changedTouches[0]; this.T.onMove(this.fake(t)); }
     else if (this.mode === 'pan' && this.pts.size === 1) {

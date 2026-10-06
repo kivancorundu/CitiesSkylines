@@ -9,6 +9,7 @@ import { TreeView } from './trees.js';
 import { VehicleView } from './vehicles.js';
 import { Effects } from './effects.js';
 import { buildOverlay, buildingTint, roadTint } from './infoviews.js';
+import { layoutW, layoutH } from '../core/screen.js';
 import { clockHour } from '../sim/weather.js';
 
 export class Renderer {
@@ -100,7 +101,7 @@ export class Renderer {
   }
 
   resize() {
-    const w = window.innerWidth, h = window.innerHeight;
+    const w = layoutW(), h = layoutH();
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
   }
@@ -118,8 +119,8 @@ export class Renderer {
   // Fare altındaki hücre (yükseklik haritasına ışın yürütme)
   pick(clientX, clientY) {
     const s = this.getState(); if (!s) return null;
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    // tuval tüm oyun düzenini kaplar; koordinatlar oyun düzenindedir (bkz. core/screen.js)
+    const ndc = new THREE.Vector2((clientX / layoutW()) * 2 - 1, -(clientY / layoutH()) * 2 + 1);
     this.raycaster.setFromCamera(ndc, this.camera);
     const o = this.raycaster.ray.origin, dir = this.raycaster.ray.direction;
     let t = 0, prev = null;
