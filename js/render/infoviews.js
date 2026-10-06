@@ -96,6 +96,10 @@ export function buildOverlay(s, out, opts) {
   if (opts.tool?.district && view !== 'districts') {
     for (let i = 0; i < C; i++) if (s.district[i]) { const d = s.districts.find((q) => q.id === s.district[i]); if (d) { const c = hex(parseInt(d.color.slice(1), 16)); set(i, c[0], c[1], c[2], 110); } }
   }
+  // imar ızgarası: imar edilebilir hücrelerde alfa tek sayı (gölgelendirici ızgara çizer)
+  if (opts.tool?.zoning && zd) {
+    for (let i = 0; i < C; i++) { const o = i * 4 + 3; if (zd[i] && !s.road[i]) out[o] = Math.max(41, out[o]) | 1; else out[o] &= 0xfe; }
+  }
   // sahip olunmayan karolar karartılır
   const tilesTool = opts.tool?.tiles || view === 'tiles';
   for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
@@ -109,13 +113,13 @@ export function buildOverlay(s, out, opts) {
       const ok = opts.buyable && opts.buyable.has(t);
       const fx = x % TILE, fz = z % TILE; const edge = fx === 0 || fz === 0 || fx === TILE - 1 || fz === TILE - 1;
       if (ok) set(i, 80, 200, 255, edge ? 200 : 70); else set(i, 0, 0, 0, edge ? 120 : 90);
-    } else if (out[i * 4 + 3] === 0) set(i, 10, 15, 25, 70);
+    } else set(i, 10, 15, 25, 70);
   }
 }
 
 // Bina renklendirme
 export function buildingTint(s, view) {
-  if (!view) return null;
+  if (!view || ['tiles', 'districts', 'resources', 'groundwater', 'wind', 'polW'].includes(view)) return null;
   switch (view) {
     case 'electricity': return (b) => { const d = b.kind === 'svc' ? SERVICES[b.type] : null; if (d?.prod?.power || d?.prod?.battery) return 0x3060e0; return b.power ? 0x50c060 : 0xe03030; };
     case 'water': return (b) => { const d = b.kind === 'svc' ? SERVICES[b.type] : null; if (d?.prod?.water) return 0x3060e0; if (!b.water) return 0xe03030; return (b.waterPol || 0) > 0.15 ? 0xa07030 : 0x50c060; };

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.cjs",
-    "test": "node tests/sim.test.mjs 12 && node tests/bot.mjs 36"
+    "test": "node tests/features.test.mjs && node tests/sim.test.mjs 6 && node tests/bot.mjs 24"
   },
   "license": "MIT"
 }

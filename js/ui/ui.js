@@ -6,7 +6,7 @@ import { ZONES } from '../data/zones.js';
 import { MILESTONES, DEV_TREE } from '../data/progression.js';
 import { isUnlocked, serviceUnlocked, zoneUnlocked, categoryUnlocked, devNodeById } from '../sim/progression.js';
 import { LINE_TYPES } from '../sim/transit.js';
-import { WEATHER_ICONS } from '../sim/weather.js';
+import { WEATHER_ICONS, clockHour } from '../sim/weather.js';
 import { PANELS, inspectorHTML, bindInspector, roadInspectorHTML } from './panels.js';
 import { createDistrict } from '../sim/actions.js';
 
@@ -176,7 +176,7 @@ export class UI {
     const h = st.happiness ?? 60;
     $('st-happy').textContent = Math.round(h) + '%'; $('st-happy-ico').textContent = h > 75 ? '😄' : h > 60 ? '🙂' : h > 45 ? '😐' : h > 30 ? '🙁' : '😠';
     $('st-weather').textContent = WEATHER_ICONS[s.weather.state]; $('st-temp').textContent = Math.round(s.weather.temp) + '°C';
-    const hh = Math.floor(s.time.tod), mm = Math.floor((s.time.tod - hh) * 60);
+    const ck = clockHour(s); const hh = Math.floor(ck), mm = Math.floor((ck - hh) * 60);
     $('date').textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} · ${MONTHS[s.time.month]} ${s.time.year}`;
     const D = s.demand;
     for (const [id, v] of [['d-r', Math.max(D.resLow, D.resMed, D.resHigh)], ['d-c', D.com], ['d-i', D.ind], ['d-o', s.milestone >= 4 ? D.off : -0.01]]) {
@@ -193,6 +193,8 @@ export class UI {
     $('ms-xp').textContent = next ? `${fmtNum(s.xp)} / ${fmtNum(next.xp)} XP` : `${fmtNum(s.xp)} XP – Megalopolis!`;
     $('devpts').textContent = `◆ ${s.devPoints}`;
     $('chirp-dot').classList.toggle('on', !!s.rt.newChirp);
+    this.advT = (this.advT || 0) - 0.25;
+    if (this.advT <= 0) { this.advT = 2; this.advisor(); }
     this.panelT -= 0.25;
     if (this.panel && this.panelT <= 0 && PANELS[this.panel].live) { this.panelT = 1; this.refreshPanel(true); }
     if (this.inspected) {
@@ -200,6 +202,35 @@ export class UI {
       if (!b) this.inspect(null);
       else if (!this.inspT || (this.inspT -= 0.25) <= 0) { this.inspT = 1; this.renderInspector(b); }
     }
+  }
+
+  // Danışman: yeni oyunculara sıradaki adımı gösterir
+  advisor() {
+    const s = this.s; const el = document.getElementById('advisor');
+    if (!s.settings.advisor) { el.classList.add('hidden'); return; }
+    let roads = 0, zones = 0, pipesW = 0, pipesS = 0;
+    for (let i = 0; i < s.road.length; i++) { if (s.road[i] && s.road[i] !== 6) roads++; if (s.zone[i]) zones++; if (s.pipeW[i]) pipesW++; if (s.pipeS[i]) pipesS++; }
+    const has = (pred) => Object.values(s.buildings).some((b) => b.kind === 'svc' && pred(SERVICES[b.type]));
+    const hasType = (t) => Object.values(s.buildings).some((b) => b.type === t);
+    let tip = null;
+    if (roads < 12) tip = '🛣️ Otoyolun ucundan başlayarak şehre yollar çekin (<b>Yollar</b> menüsü). Küçük yollar mahalleler için idealdir.';
+    else if (zones < 20) tip = '🏘️ Yolların kenarına <b>konut</b>, <b>ticari</b> ve <b>sanayi</b> bölgeleri boyayın. Sanayiyi konutlardan biraz uzak tutun.';
+    else if (!has((d) => d.prod?.power)) tip = '⚡ <b>Elektrik</b> menüsünden rüzgar türbini veya kömür santrali kurun. Yollar elektriği taşır. (Şimdilik dış bağlantıdan pahalı elektrik ithal ediliyor.)';
+    else if (!has((d) => d.prod?.water)) tip = '💧 Nehir veya göl kıyısına <b>Su Pompalama İstasyonu</b> kurun.';
+    else if (!has((d) => d.prod?.sewage)) tip = '🚽 <b>Kanalizasyon Çıkışı</b> kurun – su pompasından uzağa, akıntı yönünde!';
+    else if (pipesW < roads * 0.5 || pipesS < roads * 0.5) tip = '🔧 Yolların altına <b>su ve kanalizasyon boruları</b> döşeyin (Su menüsü → "Tüm Yollara Boru Döşe").';
+    else if (s.milestone >= 1 && !hasType('landfill') && !hasType('incinerator')) tip = '🗑️ Çöp birikiyor: bir <b>Çöp Sahası</b> kurun.';
+    else if (s.milestone >= 1 && !has((d) => d.svc?.type === 'health')) tip = '🏥 Vatandaşların sağlığı için bir <b>Sağlık Ocağı</b> kurun.';
+    else if (s.milestone >= 1 && !has((d) => d.svc?.type === 'death')) tip = '🪦 Bir <b>Mezarlık</b> kurun.';
+    else if (s.milestone >= 2 && !hasType('elementary')) tip = '🎓 <b>Eğitim</b> açıldı: İlkokul ve lise kurun; eğitimli işçiler ofisleri ve seviye atlamayı mümkün kılar.';
+    else if (s.milestone >= 3 && !has((d) => d.svc?.type === 'police')) tip = '🚓 Suçu önlemek için <b>Polis Karakolu</b> kurun.';
+    else if (s.milestone >= 3 && !has((d) => d.svc?.type === 'fire')) tip = '🚒 Yangınlara karşı <b>İtfaiye Binası</b> kurun.';
+    else if (s.devPoints > 0 && s.milestone >= 2) tip = `◆ ${s.devPoints} gelişim puanınız var. <b>İlerleme</b> panelinden yeni binaların kilidini açın.`;
+    else if (s.milestone >= 4 && !s.lines.length) tip = '🚌 Trafiği azaltmak için <b>Otobüs Garajı</b> kurup otobüs hatları oluşturun.';
+    if (!tip) { el.classList.add('hidden'); return; }
+    el.innerHTML = `<div class="adv-h">🧑‍💼 Danışman <button class="x" id="adv-x" title="Danışmanı kapat">✕</button></div><div>${tip}</div>`;
+    el.classList.remove('hidden');
+    document.getElementById('adv-x').onclick = () => { s.settings.advisor = false; el.classList.add('hidden'); };
   }
 
   onEvent(e) {
@@ -311,7 +342,7 @@ export class UI {
     else if (a === 'settings') {
       const st = this.s.settings;
       const opt = (k, n) => `<div class="row"><span>${n}</span><input type="checkbox" data-set="${k}" ${st[k] ? 'checked' : ''}></div>`;
-      const m = this.modal(`<h1>⚙️ Ayarlar</h1>${opt('shadows', 'Gölgeler')}${opt('dayNight', 'Gün/gece döngüsü')}${opt('disasters', 'Doğal afetler')}${opt('autoDemolish', 'Terk edilmiş binaları otomatik yık')}${opt('edgeScroll', 'Kenar kaydırma')}<div class="row"><span>Ses efektleri</span><input type="checkbox" id="set-sound" ${g.soundOn ? 'checked' : ''}></div><div class="menu"><button class="btn" id="st-back">Geri</button></div>`);
+      const m = this.modal(`<h1>⚙️ Ayarlar</h1>${opt('advisor', 'Danışman ipuçları')}${opt('shadows', 'Gölgeler')}${opt('dayNight', 'Gün/gece döngüsü')}${opt('disasters', 'Doğal afetler')}${opt('autoDemolish', 'Terk edilmiş binaları otomatik yık')}${opt('edgeScroll', 'Kenar kaydırma')}<div class="row"><span>Ses efektleri</span><input type="checkbox" id="set-sound" ${g.soundOn ? 'checked' : ''}></div><div class="menu"><button class="btn" id="st-back">Geri</button></div>`);
       m.querySelectorAll('[data-set]').forEach((c) => c.addEventListener('change', () => { st[c.dataset.set] = c.checked; g.renderer.cam.edgeScroll = st.edgeScroll; }));
       m.querySelector('#set-sound').addEventListener('change', (e) => { g.soundOn = e.target.checked; });
       m.querySelector('#st-back').addEventListener('click', () => this.menu());

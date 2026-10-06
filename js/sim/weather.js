@@ -8,6 +8,10 @@ export const WEATHER_ICONS = { clear: '☀️', partly: '⛅', cloudy: '☁️',
 
 export function season(s) { return SEASONS[s.time.month]; }
 
+// Görsel saat: bir gün 3 ay sürer (gün/gece döngüsü daha yavaş ve akıcı)
+export const DAY_MONTHS = 3;
+export function clockHour(s) { return ((s.time.monthsElapsed * 24 + s.time.tod) / DAY_MONTHS + 7) % 24; }
+
 export function daylightAt(month, tod) {
   // yaz günleri uzun, kış günleri kısa
   const len = 9 + 6 * Math.sin(((month - 2.5) / 12) * Math.PI * 2) * 0.5 + 3; // ~9..15 saat
@@ -21,7 +25,8 @@ export function daylightAt(month, tod) {
 export function weatherTick(s) {
   const w = s.weather, t = s.time;
   const base = CLIMATE[t.month] + (CLIMATE[(t.month + 1) % 12] - CLIMATE[t.month]) * (t.tod / 24);
-  const diurnal = Math.sin(((t.tod - 9) / 24) * Math.PI * 2) * 4;
+  const hour = clockHour(s);
+  const diurnal = Math.sin(((hour - 9) / 24) * Math.PI * 2) * 4;
   const cloudCool = w.cloud * -2;
   w.temp += (base + diurnal + cloudCool - w.temp) * 0.05;
   w.timer -= 1;
@@ -47,5 +52,5 @@ export function weatherTick(s) {
   else if (w.temp > 2) w.snowCover = Math.max(0, w.snowCover - 0.004 * (w.temp - 1));
   w.fog = w.state === 'fog' ? Math.min(1, (w.fog || 0) + 0.05) : Math.max(0, (w.fog || 0) - 0.05);
   w.windStrength = clamp(w.windStrength + (Math.random() - 0.5) * 0.06 + (w.state === 'storm' ? 0.02 : 0) - (w.windStrength - 0.55) * 0.02, 0.1, 1.2);
-  s.rt.daylight = daylightAt(t.month, t.tod);
+  s.rt.daylight = daylightAt(t.month, hour);
 }

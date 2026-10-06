@@ -45,7 +45,8 @@ export class TerrainView {
       fragmentShader: `uniform sampler2D uTex; uniform float uGrid; varying vec2 vUv;
         void main(){ vec4 c = texture2D(uTex, vUv); vec2 f = fract(vUv * ${N.toFixed(1)});
           float edge = step(f.x, 0.06) + step(0.94, f.x) + step(f.y, 0.06) + step(0.94, f.y);
-          if (uGrid > 0.5 && c.a > 0.01) { c.a = min(1.0, c.a + edge * 0.35); c.rgb = mix(c.rgb, vec3(1.0), min(1.0, edge) * 0.35); }
+          float odd = mod(floor(c.a * 255.0 + 0.5), 2.0);
+          if (uGrid > 0.5 && odd > 0.5) { c.a = min(1.0, c.a + edge * 0.35); c.rgb = mix(c.rgb, vec3(1.0), min(1.0, edge) * 0.35); }
           if (c.a < 0.01) discard; gl_FragColor = c; }`,
     });
     this.overlay = new THREE.Mesh(g, ovMat);

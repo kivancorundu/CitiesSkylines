@@ -9,6 +9,7 @@ import { TreeView } from './trees.js';
 import { VehicleView } from './vehicles.js';
 import { Effects } from './effects.js';
 import { buildOverlay, buildingTint, roadTint } from './infoviews.js';
+import { clockHour } from '../sim/weather.js';
 
 export class Renderer {
   constructor(canvas, getState) {
@@ -93,7 +94,7 @@ export class Renderer {
     const d = s.rt.dirty;
     this.cam.update(dt);
     // gün/gece ve hava
-    const tod = s.time.tod;
+    const tod = clockHour(s);
     const dayF = s.settings.dayNight ? s.rt.daylight : 1;
     const night = 1 - dayF;
     const sunAng = ((tod - 6) / 24) * Math.PI * 2;

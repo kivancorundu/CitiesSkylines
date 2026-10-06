@@ -31,7 +31,9 @@ export class VehicleView {
       bus: new Pool(scene, carGeo(11, 2.5, 3.2, false), mat, 64),
       tram: new Pool(scene, carGeo(7, 2.5, 3.4, false), mat, 128),
       train: new Pool(scene, carGeo(14, 3, 3.8, false), mat, 128),
+      ped: new Pool(scene, new THREE.CylinderGeometry(0.28, 0.32, 1.75, 6).translate(0, 0.5, 0), mat, 256),
     };
+    this.peds = [];
     this.agents = [];
     this.transit = new Map();
     this.max = 450;
@@ -48,7 +50,39 @@ export class VehicleView {
     this.agents.push({ path, u: 0, kind, col, pool: kind === 'car' ? 'car' : kind === 'truck' ? 'truck' : 'car', spd: 0.85 + Math.random() * 0.3 });
   }
 
-  clear() { this.agents = []; this.transit.clear(); }
+  clear() { this.agents = []; this.peds = []; this.transit.clear(); }
+
+  // Yayalar: binaların önündeki kaldırımlarda kısa yürüyüşler
+  updatePeds(s, dt, speedMul, put, P) {
+    const pop = s.stats.pop || 0;
+    const target = Math.min(350, Math.floor(pop / 12));
+    const tw = s.rt.tw;
+    while (this.peds.length < target && tw && tw.homes.length && Math.random() < 0.5) {
+      const list = Math.random() < 0.5 || !tw.works.length ? tw.homes : tw.works;
+      const b = list[(Math.random() * list.length) | 0];
+      if (!(b.access >= 0)) break;
+      const path = [b.access]; let c = b.access;
+      for (let k = 0; k < 4 + ((Math.random() * 8) | 0); k++) {
+        const x = c % N, z = (c / N) | 0; const opts = [];
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (nx < 0 || nz < 0 || nx >= N || nz >= N) continue; const j = nz * N + nx; if (s.road[j] && s.road[j] !== 6 && j !== path[path.length - 2]) opts.push(j); }
+        if (!opts.length) break; c = opts[(Math.random() * opts.length) | 0]; path.push(c);
+      }
+      if (path.length < 2) break;
+      const side = Math.random() < 0.5 ? 3.5 : -3.5;
+      this.peds.push({ path, u: 0, side, col: CAR_COLORS[(Math.random() * CAR_COLORS.length) | 0], spd: 0.25 + Math.random() * 0.15 });
+    }
+    if (this.peds.length > target + 20) this.peds.length = target;
+    this.pools.ped.ensure(this.peds.length + 4);
+    const keep = [];
+    for (const p of this.peds) {
+      p.u += p.spd * speedMul * dt;
+      if (p.u >= p.path.length - 1 || !s.road[p.path[Math.min(p.path.length - 1, Math.floor(p.u))]]) continue;
+      this.posAt(s, p.path, p.u, P, p.side); P.y -= 0.1;
+      put('ped', P, p.col);
+      keep.push(p);
+    }
+    this.peds = keep;
+  }
 
   posAt(s, path, u, out, laneOff = 1.7) {
     const n = path.length - 1;
@@ -65,7 +99,7 @@ export class VehicleView {
   }
 
   update(s, dt, speedMul, showLines) {
-    const counts = { car: 0, truck: 0, bus: 0, tram: 0, train: 0 };
+    const counts = { car: 0, truck: 0, bus: 0, tram: 0, train: 0, ped: 0 };
     const P = { x: 0, y: 0, z: 0, ang: 0 };
     const pools = this.pools;
     const put = (pool, p, col, yoff = 0) => {
@@ -131,6 +165,7 @@ export class VehicleView {
       }
     }
     for (const id of this.transit.keys()) if (!seen.has(id)) this.transit.delete(id);
+    this.updatePeds(s, dt, speedMul, put, P);
     for (const k in counts) pools[k].commit(counts[k]);
     this.lineObj.visible = showLines;
     if (showLines) {

@@ -294,6 +294,7 @@ export function inspectorHTML(ui, b) {
     if (hc) h += row('Hane', `${b.hh} / ${hc}`) + row('Sakin', fmtNum(residents(b)));
     if (jc) h += row('Çalışan', `${b.emp || 0} / ${jc}`) + `<div class="row"><span class="l">Personel</span>${bar(b.staffing || 0)}</div>`;
     if (b.product) h += row('Ürün', PRODUCTS[b.product]?.name || b.product);
+    if (b.resLeft !== undefined) h += `<div class="row"><span class="l">Kalan kaynak</span>${bar(b.resLeft, b.resLeft < 0.2 ? 'var(--bad)' : '')}</div>`;
     h += `<div class="row"><span class="l">Mutluluk</span>${bar((b.happy || 0) / 100, b.happy < 40 ? 'var(--bad)' : b.happy > 65 ? 'var(--good)' : 'var(--warn)')}<span>${Math.round(b.happy || 0)}</span></div>`;
   } else {
     const st = svcStats(b);

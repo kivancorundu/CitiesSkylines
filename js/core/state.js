@@ -36,7 +36,7 @@ export function createState(seed = (Math.random() * 1e9) | 0, cityName) {
     history: [],
     chirps: [],
     weather: { state: 'clear', temp: 15, cloud: 0.2, rain: 0, snow: 0, windStrength: 0.6, timer: 0, snowCover: 0 },
-    settings: { disasters: true, autoDemolish: true, shadows: true, edgeScroll: false, dayNight: true },
+    settings: { advisor: true, disasters: true, autoDemolish: true, shadows: true, edgeScroll: false, dayNight: true },
     edu: [0, 0, 0, 0, 0],     // yetişkin eğitim seviyesi sayıları
     ageFrac: [0.2, 0.1, 0.55, 0.15],
     econ: { inc: {}, exp: {}, last: null, lastMonthBalance: 0 },
@@ -154,13 +154,30 @@ function b64ToBytes(b64) {
   return out;
 }
 
+// Türetilmiş alanlar kaydedilmez (yüklemede yeniden hesaplanır)
+const DERIVED = new Set(['polG', 'polA', 'polN', 'lv', 'traffic', 'crimeMap', 'cov']);
+// Hassasiyeti düşük alanlar 8 bite indirgenerek kaydedilir
+const QUANT = { gw: 250, wind: 250, resAmt: 250, polW: 80 };
+
+function rleU8(a) {
+  const out = [];
+  for (let i = 0; i < a.length;) { const v = a[i]; let n = 1; while (i + n < a.length && a[i + n] === v && n < 255) n++; out.push(v, n); i += n; }
+  return u8ToB64(new Uint8Array(out));
+}
+function unrleU8(b64, len) {
+  const d = b64ToBytes(b64); const out = new Uint8Array(len); let o = 0;
+  for (let i = 0; i < d.length; i += 2) { out.fill(d[i], o, o + d[i + 1]); o += d[i + 1]; }
+  return out;
+}
+
 export function serialize(s) {
   const o = {};
   for (const k of Object.keys(s)) {
-    if (k === 'rt') continue;
+    if (k === 'rt' || DERIVED.has(k)) continue;
     const v = s[k];
-    if (v instanceof Uint8Array || v instanceof Float32Array || v instanceof Int32Array) o[k] = { __t: v.constructor.name, d: u8ToB64(v) };
-    else if (k === 'cov') { o.cov = {}; for (const t in v) o.cov[t] = { __t: 'Float32Array', d: u8ToB64(v[t]) }; }
+    if (QUANT[k] && v instanceof Float32Array) { const q = new Uint8Array(v.length); for (let i = 0; i < v.length; i++) q[i] = Math.max(0, Math.min(255, Math.round(v[i] * QUANT[k]))); o[k] = { __t: 'Q8', q: QUANT[k], n: v.length, d: rleU8(q) }; }
+    else if (v instanceof Uint8Array) o[k] = { __t: 'U8R', n: v.length, d: rleU8(v) };
+    else if (v instanceof Float32Array || v instanceof Int32Array) o[k] = { __t: v.constructor.name, d: u8ToB64(v) };
     else if (k === 'buildings') {
       o.buildings = {};
       for (const id in v) { const b = { ...v[id] }; for (const kk of Object.keys(b)) if (kk.startsWith('_')) delete b[kk]; o.buildings[id] = b; }
@@ -172,6 +189,8 @@ export function serialize(s) {
 export function deserialize(json) {
   const o = JSON.parse(json);
   const fix = (v) => {
+    if (v && v.__t === 'U8R') return unrleU8(v.d, v.n);
+    if (v && v.__t === 'Q8') { const q = unrleU8(v.d, v.n); const f = new Float32Array(v.n); for (let i = 0; i < v.n; i++) f[i] = q[i] / v.q; return f; }
     if (v && v.__t) {
       const bytes = b64ToBytes(v.d);
       const T = { Uint8Array, Float32Array, Int32Array }[v.__t];
@@ -180,7 +199,12 @@ export function deserialize(json) {
     return v;
   };
   for (const k of Object.keys(o)) o[k] = fix(o[k]);
-  for (const t in o.cov) o.cov[t] = fix(o.cov[t]);
+  const C = N * N;
+  for (const k of ['polG', 'polA', 'polN', 'traffic', 'crimeMap']) if (!o[k]) o[k] = new Float32Array(C);
+  if (!o.lv) o.lv = new Float32Array(C).fill(20);
+  if (o.cov && o.cov.health && o.cov.health.__t) for (const t in o.cov) o.cov[t] = fix(o.cov[t]);
+  if (!o.cov || !o.cov.health || !(o.cov.health instanceof Float32Array)) { o.cov = {}; for (const t of COV_TYPES) o.cov[t] = new Float32Array(C); }
+  if (!o.polW) o.polW = new Float32Array(C);
   return o;
 }
 

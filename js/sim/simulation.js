@@ -91,7 +91,7 @@ export function tick(s) {
     updatePopulation(s); matchJobs(s); computeCityEffects(s); buildingServices(s);
     computeDemand(s); growthSlow(s); fireRisk(s); computeRates(s); trafficSlow(s); avgLandValue(s);
   }
-  if (rt.dirty.cov && t.tick % 20 === 0 || t.tick % 120 === 0) { computeCoverage(s); rt.dirty.cov = false; }
+  if (rt.dirty.cov && t.tick % 20 === 7 || t.tick % 90 === 47) { computeCoverage(s); rt.dirty.cov = false; }
   if (t.tick % 20 === 5) updatePollution(s);
   if (t.tick % 30 === 15) { updateLandValue(s); trafficStats(s); computeHappyMap(s); }
   if (t.tod >= 24) monthly(s);

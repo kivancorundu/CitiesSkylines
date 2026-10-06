@@ -107,7 +107,8 @@ export function computeDemand(s) {
   const jb = s.rt.jobsBy || { comJobs: 0, indJobs: 0, offJobs: 0 };
   const tourists = st.tourists || 0;
   const freeHH = Math.max(0, (st.hhCap || 0) - (st.households || 0));
-  let R = 0.5 + vac * 1.6 - unemp * 3.2 + (happy - 55) / 110 - (s.taxes.res - 10) * 0.05 + (pop < 400 ? 0.3 : 0);
+  const unempW = Math.min(1, 0.3 + pop / 2000);
+  let R = 0.5 + vac * 1.6 - Math.max(0, unemp - 0.04) * 3.2 * unempW + (happy - 55) / 110 - (s.taxes.res - 10) * 0.05 + (pop < 400 ? 0.3 : 0);
   if (freeHH > 60 + pop * 0.08) R -= 0.25;
   R = clamp(R, -1, 1);
   // ticari
@@ -144,7 +145,18 @@ export function computeProduction(s) {
     const b = s.buildings[id];
     if (b.built < 1 || b.abandoned || b.collapsed) continue;
     if (b.kind === 'zone' && b.product) {
-      const z = ZONES[b.type]; const out = b.emp * (1 + (b.level - 1) * 0.2);
+      const z = ZONES[b.type]; let out = b.emp * (1 + (b.level - 1) * 0.2);
+      if (z.special) {
+        // doğal kaynak tükenmesi: petrol ve cevher tükenir, tarım ve orman yenilenir
+        let amt = 0, n = 0;
+        for (let zz = b.z; zz < b.z + b.sz; zz++) for (let xx = b.x; xx < b.x + b.sx; xx++) {
+          const i = xx + zz * N; amt += s.resAmt[i]; n++;
+          if (z.res === 3 || z.res === 4) s.resAmt[i] = Math.max(0, s.resAmt[i] - 0.004 * (b.staffing ?? 1));
+          else s.resAmt[i] = Math.min(1, s.resAmt[i] + 0.01);
+        }
+        b.resLeft = n ? amt / n : 0;
+        out *= Math.min(1, b.resLeft * 2);
+      }
       addP(b.product, out * (z.special ? 2 : 1));
       if (!z.special) {
         const raw = { food: 'grain', paper: 'wood', plastics: 'oil', metals: 'ore', goods: null }[b.product];

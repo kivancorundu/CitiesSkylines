@@ -29,6 +29,12 @@ function attach(s, b, comp) {
   return -1;
 }
 
+// Yeni bir binayı mevcut ağ etiketlerine bağla (yeniden etiketlemeden)
+export function attachNetworks(s, b) {
+  const net = s.rt.net; if (!net) return;
+  b._ec = attach(s, b, net.e.comp); b._wc = attach(s, b, net.w.comp); b._sc = attach(s, b, net.sw.comp);
+}
+
 // Ağ yapısı değiştiğinde çağrılır
 export function computeNetworks(s) {
   const e = label(s, (i) => s.road[i] > 0 || s.power[i] > 0);

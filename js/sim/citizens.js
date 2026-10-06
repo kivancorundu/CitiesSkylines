@@ -85,8 +85,10 @@ export function matchJobs(s) {
   const filledAll = [0, 0, 0, 0, 0], Jall = [0, 0, 0, 0, 0];
   for (let p = 0; p < 2; p++) {
     const filled = [0, 0, 0, 0, 0];
+    // hizmetler iş gücünün en fazla %35'ini öncelikli alır; kalanı şirketlerle eşit yarışır
+    const scale = p === 0 ? Math.min(1, (totalW * 0.35) / Math.max(1, J[0].reduce((a, b) => a + b, 0))) : 1;
     for (let L = 4; L >= 0; L--) {
-      let need = J[p][L];
+      let need = J[p][L] * scale;
       // önce aynı veya daha yüksek eğitimli, sonra (hizmetler için) bir alt seviyeden
       for (let k = L; k <= 4 && need > 0; k++) { const t = Math.min(need, rem[k]); rem[k] -= t; need -= t; filled[L] += t; }
       if (p === 0) for (let k = L - 1; k >= Math.max(0, L - 1) && need > 0; k--) { const t = Math.min(need, rem[k]); rem[k] -= t; need -= t; filled[L] += t; }
@@ -104,6 +106,11 @@ export function matchJobs(s) {
     b.emp = Math.round(jc * b.staffing);
     emp += b.emp; jobs += jc;
   }
+  // dış bağlantı üzerinden şehir dışına çalışmaya gidenler (CS2'deki banliyö yolcuları)
+  const outsideCap = s.rt.outsideRoad !== undefined ? totalW * 0.18 : 0;
+  let commute = 0;
+  for (let L = 4; L >= 0 && commute < outsideCap; L--) { const t = Math.min(rem[L], outsideCap - commute); rem[L] -= t; commute += t; s.rt.empByEdu[L] += t * 0.85; }
+  s.stats.commuters = Math.round(commute);
   const unemployed = rem.reduce((a, b) => a + b, 0);
   s.stats.workers = Math.round(totalW); s.stats.employed = Math.round(totalW - unemployed); s.stats.jobs = Math.round(jobs);
   s.stats.unemployment = totalW > 0 ? unemployed / totalW : 0;

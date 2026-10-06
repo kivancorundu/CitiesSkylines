@@ -163,7 +163,7 @@ export function growthSlow(s) {
     if (z.group === 'C' && s.rt.customerRatio < 0.35) { issues++; why.push('Müşteri yok'); }
     b.probWhy = why.join(', ');
     if (issues) b.prob += issues; else b.prob = Math.max(0, b.prob - 2);
-    if (b.prob > 110) {
+    if (b.prob > 160) {
       b.abandoned = s.time.monthsElapsed || 1; b.hh = 0; b.emp = 0; b.prob = 0;
       s.rt.dirty.buildings = true;
       s.rt.events.push({ type: 'abandoned', b: b.id });

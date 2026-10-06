@@ -4,6 +4,7 @@ import { ZONES } from '../data/zones.js';
 import { SERVICES } from '../data/services.js';
 import { STREET } from '../data/names.js';
 import { pick } from '../core/rng.js';
+import { attachNetworks } from './utilities.js';
 
 export function dimsFor(w, d, f) { return f % 2 === 0 ? [d, w] : [w, d]; }
 
@@ -31,7 +32,9 @@ export function makeBuilding(s, kind, type, x, z, w, d, f) {
   for (let zz = z; zz < z + sz; zz++) for (let xx = x; xx < x + sx; xx++) {
     const i = idx(xx, zz); s.bld[i] = b.id; s.tree[i] = 0;
   }
-  s.rt.dirty.buildings = true; s.rt.dirty.util = true; s.rt.dirty.cov = true;
+  s.rt.dirty.buildings = true;
+  if (kind === 'svc') { s.rt.dirty.util = true; s.rt.dirty.cov = true; }
+  else attachNetworks(s, b);
   return b;
 }
 
@@ -41,7 +44,8 @@ export function removeBuilding(s, b, keepZone = true) {
   }
   delete s.buildings[b.id];
   if (s.rt.selected === b.id) s.rt.selected = null;
-  s.rt.dirty.buildings = true; s.rt.dirty.util = true; s.rt.dirty.cov = true; s.rt.dirty.zones = true;
+  s.rt.dirty.buildings = true; s.rt.dirty.zones = true; s.rt.dirty.cand = true;
+  if (b.kind === 'svc') { s.rt.dirty.util = true; s.rt.dirty.cov = true; }
   s.rt.removed.push(b.id);
 }
 
