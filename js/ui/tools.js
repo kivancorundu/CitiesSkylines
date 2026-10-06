@@ -14,10 +14,13 @@ export class Tools {
     this.g = game; this.tool = { type: 'select' }; this.hover = null; this.start = null; this.mouseDown = false; this.rot = null;
     this.brushR = 2; this.zoneMode = 'rect'; this.bulldozeMode = 'all'; this.lastApply = 0;
     const cv = game.renderer.renderer.domElement;
-    cv.addEventListener('mousemove', (e) => this.onMove(e));
+    // sürükleme sırasında fare arayüzün üzerine gelse bile araç çalışmaya devam eder
+    window.addEventListener('mousemove', (e) => {
+      if (e.target === cv || this.mouseDown) this.onMove(e);
+      else if (this.hover) { this.hover = null; this.refresh(); this.g.ui.cursor(0, 0, ''); }
+    });
     cv.addEventListener('mousedown', (e) => { if (e.button === 0) this.onDown(e); });
     window.addEventListener('mouseup', (e) => { if (e.button === 0) this.onUp(e); if (e.button === 2) this.onRight(e); });
-    cv.addEventListener('mouseleave', () => { this.hover = null; this.refresh(); });
   }
   get s() { return this.g.state; }
   get fx() { return this.g.renderer.effects; }
