@@ -70,16 +70,16 @@ export class SmoothRoads {
     this.clear();
     const surf = new Buf(), walk = new Buf(), mark = new Buf(), struct = new Buf(), lamps = new Buf(), heads = new Buf();
     const C = N * N;
-    const acc = new Float32Array(C * 4); // x, y, z, sayı
+    const acc = new Float32Array(C * 4); // araçlar için hücre konumu: x, y, z, sayı
     this.treePts = [];
-    // kavşaklar: derecesi ≥3 olan hücreler
+    // araçlar: derecesi ≥3 olan hücrelerde kavşak merkezi
     const deg = (i) => { let n = 0; eachRoadNbr(s, i, () => n++); return n; };
     const junc = new Map();
-    for (let i = 0; i < C; i++) if (s.road[i] && deg(i) >= 3 && s.rElev[i] !== 2) junc.set(i, { x: 0, z: 0, y: -1e9, n: 0, w: 0, type: s.road[i] });
-    const segs = s.segs || [];
+    for (let i = 0; i < C; i++) if (s.road[i] && deg(i) >= 3 && s.rElev[i] !== 2) junc.set(i, { x: 0, z: 0, y: -1e9, n: 0 });
+    const colOf = (c) => { const t = tintFn ? tintFn(c) : null; return new THREE.Color(t !== null && t !== undefined ? t : ROADS[s.road[c]].color); };
     // 1. geçiş: örnekleri dünya koordinatına çevir, yükseklikleri hesapla
     const prepared = [];
-    for (const sg of segs) {
+    for (const sg of s.segs || []) {
       const n = sg.p.length / 2; if (n < 2) continue;
       const X = new Float32Array(n), Z = new Float32Array(n), Y = new Float32Array(n), T = new Float32Array(n), cell = new Int32Array(n), ok = new Uint8Array(n);
       for (let k = 0; k < n; k++) {
@@ -106,12 +106,13 @@ export class SmoothRoads {
         const c = cell[k]; if (!ok[k]) continue;
         const tun = s.rElev[c] === 2;
         const o = c * 4; acc[o] += X[k]; acc[o + 1] += tun ? Y[k] - 14 : Y[k]; acc[o + 2] += Z[k]; acc[o + 3]++;
-        const j = junc.get(c); if (j) { j.x += X[k]; j.z += Z[k]; j.y = Math.max(j.y, Y[k]); j.n++; j.w = Math.max(j.w, WIDTH[ROADS[s.road[c]].key]); }
+        const j = junc.get(c); if (j) { j.x += X[k]; j.z += Z[k]; j.y = Math.max(j.y, Y[k]); j.n++; }
       }
-      prepared.push({ X, Z, Y, T, cell, ok, n });
+      const c0 = ok[0] ? cell[0] : cell[n - 1];
+      const key = ROADS[s.road[c0] || 1].key;
+      prepared.push({ X, Z, Y, cell, ok, n, key, W: WIDTH[key], SW: WALK[key], tS: 0, tE: 0, nS: null, nE: null });
     }
-    for (const j of junc.values()) if (j.n) { j.x /= j.n; j.z /= j.n; j.r = j.w / 2 + 0.9; }
-    // araçlar için hücre konumları
+    for (const j of junc.values()) if (j.n) { j.x /= j.n; j.z /= j.n; }
     this.cellHas.fill(0);
     for (let i = 0; i < C; i++) {
       const o = i * 4; if (!acc[o + 3]) continue;
@@ -120,21 +121,62 @@ export class SmoothRoads {
       else { this.cellPos[i * 3] = acc[o] / acc[o + 3]; this.cellPos[i * 3 + 1] = acc[o + 1] / acc[o + 3]; this.cellPos[i * 3 + 2] = acc[o + 2] / acc[o + 3]; }
       this.cellHas[i] = 1;
     }
-    const nearJunc = (x, z, c) => {
-      const cx = c % N, cz = (c / N) | 0; let best = null, bd = 1e9;
-      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-        const j = junc.get((cz + dz) * N + cx + dx); if (!j || !j.n) continue;
-        const d = Math.hypot(x - j.x, z - j.z); if (d < bd) { bd = d; best = j; }
-      }
-      return best ? { j: best, d: bd } : null;
+    // 2. düğümler: şerit uçlarının çakıştığı noktalar
+    const nodes = new Map();
+    const endDir = (P, atStart) => {
+      const { X, Z, n } = P; let k = atStart ? 0 : n - 1; const step = atStart ? 1 : -1; let L = 0;
+      while (k + step >= 0 && k + step < n && L < 3) { L += Math.hypot(X[k + step] - X[k], Z[k + step] - Z[k]); k += step; }
+      const e = atStart ? 0 : n - 1; const dx = X[k] - X[e], dz = Z[k] - Z[e]; const l = Math.hypot(dx, dz) || 1;
+      return [dx / l, dz / l];
     };
-    const colOf = (c) => { const t = tintFn ? tintFn(c) : null; return new THREE.Color(t !== null && t !== undefined ? t : ROADS[s.road[c]].color); };
-    // 2. geçiş: şeritleri üret
+    for (const P of prepared) for (const atStart of [true, false]) {
+      const e = atStart ? 0 : P.n - 1;
+      const key = Math.round(P.X[e] * 4) + ',' + Math.round(P.Z[e] * 4);
+      let nd = nodes.get(key); if (!nd) nodes.set(key, (nd = { x: P.X[e], z: P.Z[e], y: -1e9, ends: [], cell: P.cell[e] }));
+      nd.y = Math.max(nd.y, P.Y[e]);
+      const d = endDir(P, atStart);
+      nd.ends.push({ P, atStart, d, ang: Math.atan2(d[1], d[0]), hw: P.W / 2, ow: P.W / 2 + P.SW });
+      if (atStart) P.nS = nd; else P.nE = nd;
+    }
+    // kavşaklarda şeritleri kırp: diğer yolların genişliği kadar geri çek
+    const segLen = (P) => { let L = 0; for (let k = 1; k < P.n; k++) L += Math.hypot(P.X[k] - P.X[k - 1], P.Z[k] - P.Z[k - 1]); return L; };
+    for (const nd of nodes.values()) {
+      nd.deg = nd.ends.length;
+      if (nd.deg < 3) continue;
+      for (const e of nd.ends) {
+        let need = 0;
+        for (const o of nd.ends) {
+          if (o === e) continue;
+          const sin = Math.abs(e.d[0] * o.d[1] - e.d[1] * o.d[0]);
+          need = Math.max(need, o.ow / Math.max(0.5, sin) * 0.9);
+        }
+        const t = Math.min(need + 0.8, segLen(e.P) * 0.45);
+        e.trim = t; if (e.atStart) e.P.tS = t; else e.P.tE = t;
+      }
+    }
+    // kırpılmış şerit dizileri
     for (const P of prepared) {
-      const { X, Z, Y, cell, ok, n } = P;
-      let dash = 0, lampAcc = 0, postAcc = 0, pillarAcc = 6, prevJd = 99;
+      const { X, Z, Y, cell, ok, n } = P; const S = new Float32Array(n);
+      for (let k = 1; k < n; k++) S[k] = S[k - 1] + Math.hypot(X[k] - X[k - 1], Z[k] - Z[k - 1]);
+      const a = P.tS, b = S[n - 1] - P.tE;
+      const X2 = [], Z2 = [], Y2 = [], C2 = [], O2 = [];
+      const at = (sv) => { let k = 0; while (k < n - 2 && S[k + 1] < sv) k++; const t = (sv - S[k]) / Math.max(1e-6, S[k + 1] - S[k]); X2.push(X[k] + (X[k + 1] - X[k]) * t); Z2.push(Z[k] + (Z[k + 1] - Z[k]) * t); Y2.push(Y[k] + (Y[k + 1] - Y[k]) * t); const kk = t < 0.5 ? k : k + 1; C2.push(cell[kk]); O2.push(ok[kk]); };
+      if (b - a > 0.3) {
+        at(a);
+        for (let k = 0; k < n; k++) if (S[k] > a + 0.05 && S[k] < b - 0.05) { X2.push(X[k]); Z2.push(Z[k]); Y2.push(Y[k]); C2.push(cell[k]); O2.push(ok[k]); }
+        at(b);
+      }
+      P.D = { X: Float32Array.from(X2), Z: Float32Array.from(Z2), Y: Float32Array.from(Y2), cell: Int32Array.from(C2), ok: Uint8Array.from(O2), n: X2.length };
+    }
+    // 3. şeritleri çiz
+    for (const P of prepared) {
+      const { X, Z, Y, cell, ok, n } = P.D; if (n < 2) continue;
+      const jS = P.nS && P.nS.deg >= 3, jE = P.nE && P.nE.deg >= 3;
+      let dash = 0, lampAcc = 0, postAcc = 0, pillarAcc = 6, run = 0;
+      let total = 0; for (let k = 1; k < n; k++) total += Math.hypot(X[k] - X[k - 1], Z[k] - Z[k - 1]);
       for (let k = 0; k < n - 1; k++) {
         const a = k, b = k + 1;
+        const ds = Math.hypot(X[b] - X[a], Z[b] - Z[a]); run += ds;
         if (!ok[a] || !ok[b]) continue;
         const ca = cell[a], cb = cell[b];
         const tunA = s.rElev[ca] === 2, tunB = s.rElev[cb] === 2;
@@ -142,16 +184,13 @@ export class SmoothRoads {
         if (tunA && tunB) continue;
         const def = ROADS[s.road[ca]], key = def.key;
         const W = WIDTH[key], SW = WALK[key];
-        // teğet ve normaller
         const tA = this.tangent(X, Z, a, n), tB = this.tangent(X, Z, b, n);
         const nA = [-tA[1], tA[0]], nB = [-tB[1], tB[0]];
         const L = (k2, nn, off, dy = 0) => [X[k2] + nn[0] * off, Y[k2] + dy, Z[k2] + nn[1] * off];
         const col = colOf(ca);
         surf.quad(L(a, nA, W / 2), L(b, nB, W / 2), L(b, nB, -W / 2), L(a, nA, -W / 2), col);
-        const ds = Math.hypot(X[b] - X[a], Z[b] - Z[a]);
         const raised = Y[a] - Math.max(heightAt(s, X[a], Z[a]), WATER_Y) > 1.6;
         const bridge = s.water[ca] || s.rElev[ca] === 1 || raised;
-        // kaldırımlar
         if (SW > 0) {
           const grass = s.roadUp[ca] & 2;
           for (const sd of [1, -1]) {
@@ -164,20 +203,15 @@ export class SmoothRoads {
           for (const sd of [1, -1]) surf.quad(L(a, nA, sd * W / 2, 0), L(b, nB, sd * W / 2, 0), L(b, nB, sd * W / 2, bridge ? -1.2 : -0.5), L(a, nA, sd * W / 2, bridge ? -1.2 : -0.5), C_CONC_D);
         }
         const EW = W / 2 + SW;
-        // köprü tabliyesi altı
         if (bridge) {
           struct.quad(L(a, nA, EW, -1.2), L(b, nB, EW, -1.2), L(b, nB, -EW, -1.2), L(a, nA, -EW, -1.2), C_CONC_D);
-          // korkuluk: üst ray + dikmeler
           for (const sd of [1, -1]) {
             const e = sd * (EW - 0.1);
             struct.quad(L(a, nA, e, 1.0), L(b, nB, e, 1.0), L(b, nB, e, 1.12), L(a, nA, e, 1.12), C_RAIL);
             struct.quad(L(a, nA, e, 0.45), L(b, nB, e, 0.45), L(b, nB, e, 0.55), L(a, nA, e, 0.55), C_RAIL);
           }
           postAcc += ds;
-          if (postAcc >= 2.5) {
-            postAcc = 0;
-            for (const sd of [1, -1]) { const p = L(a, nA, sd * (EW - 0.1)); struct.box(p[0], p[1], p[2], 0.14, 1.12, 0.14, C_POST); }
-          }
+          if (postAcc >= 2.5) { postAcc = 0; for (const sd of [1, -1]) { const p = L(a, nA, sd * (EW - 0.1)); struct.box(p[0], p[1], p[2], 0.14, 1.12, 0.14, C_POST); } }
           pillarAcc += ds;
           const ground = s.water[ca] ? -6 : heightAt(s, X[a], Z[a]);
           if (pillarAcc >= 18 && Y[a] - ground > 2.2) {
@@ -188,45 +222,106 @@ export class SmoothRoads {
             struct.box(X[a], top - 0.9, Z[a], 1.8, 0.9, EW * 2, C_CONC, ang);
           }
         } else if (key === 'highway') {
-          // otoyol bariyerleri
           for (const sd of [1, -1]) { const e = sd * (W / 2 - 0.2); struct.quad(L(a, nA, e, 0.45), L(b, nB, e, 0.45), L(b, nB, e, 0.75), L(a, nA, e, 0.75), C_RAIL); }
           postAcc += ds; if (postAcc >= 4) { postAcc = 0; for (const sd of [1, -1]) { const p = L(a, nA, sd * (W / 2 - 0.2)); struct.box(p[0], p[1], p[2], 0.12, 0.75, 0.12, C_POST); } }
         }
-        // kavşak yakınında çizgi çizme; yaya geçidi
-        const nj = nearJunc(X[a], Z[a], ca);
-        const jd = nj ? nj.d - nj.j.r : 99;
-        if (nj && def.mark !== null && key !== 'highway' && ((prevJd < 0.9 && jd >= 0.9) || (prevJd >= 0.9 && jd < 0.9 && k > 0))) this.zebra(mark, L, a, nA, tA, W);
-        prevJd = jd;
-        if (jd > 0.6) this.markings(mark, L, a, b, nA, nB, key, W, def, dash, ds);
+        // kavşak ağızlarında yaya geçidi ve dur çizgisi
+        const fromS = run - ds, toE = total - run;
+        const zebraOn = def.mark !== null && key !== 'highway' && key !== 'gravel';
+        if (zebraOn && jS && fromS < 1e-3) this.zebra(mark, L, a, nA, tA, W, 1.6);
+        if (zebraOn && jE && toE < 1e-3) this.zebra(mark, L, b, nB, tB, W, -1.6);
+        if ((!jS || fromS > 3.5) && (!jE || toE > 3.5)) this.markings(mark, L, a, b, nA, nB, key, W, def, dash, ds);
         dash += ds;
         if (s.roadUp[ca] & 4 && (k % 6 === 0)) mark.quad(L(a, nA, W / 2), L(b, nB, W / 2), L(b, nB, -W / 2), L(a, nA, -W / 2), C_YEL);
-        // sokak lambaları
         lampAcc += ds;
-        if (lampAcc >= 14 && key !== 'highway' && key !== 'gravel' && jd > 1.5) {
+        if (lampAcc >= 14 && key !== 'highway' && key !== 'gravel' && fromS > 4 && toE > 4) {
           lampAcc = 0;
           const sd = (k / 7) % 2 < 1 ? 1 : -1; const p = L(a, nA, sd * (W / 2 + Math.max(0.4, SW * 0.5)), SW ? 0.15 : 0);
           lamps.box(p[0], p[1], p[2], 0.16, 6.2, 0.16, C_LAMP);
           const h = [p[0] - nA[0] * sd * 0.9, p[1] + 6.0, p[2] - nA[1] * sd * 0.9];
           heads.box(h[0], h[1], h[2], 0.9, 0.22, 0.5, C_WHITE, Math.atan2(nA[1], nA[0]));
         }
-        // yol ağaçları
-        if ((s.roadUp[ca] & 1) && k % 4 === 0 && !bridge) for (const sd of [1, -1]) { const p = L(a, nA, sd * (W / 2 + SW + 0.6)); this.treePts.push(p); }
-      }
-      // çıkmaz sokak uçları
-      for (const e of [0, n - 1]) {
-        if (!ok[e] || s.rElev[cell[e]] === 2) continue;
-        const c = cell[e]; let d = 0; eachRoadNbr(s, c, () => d++);
-        if (d <= 1 && !junc.has(c)) { const W = WIDTH[ROADS[s.road[c]].key]; surf.disc(X[e], Y[e] + 0.004, Z[e], W / 2, colOf(c)); }
+        if ((s.roadUp[ca] & 1) && k % 4 === 0 && !bridge && fromS > 3 && toE > 3) for (const sd of [1, -1]) { const p = L(a, nA, sd * (W / 2 + SW + 0.6)); this.treePts.push(p); }
       }
     }
-    // kavşak dolguları
-    for (const [c, j] of junc) if (j.n) surf.disc(j.x, j.y + 0.01, j.z, j.r, colOf(c), 24);
+    // 4. düğümler: kavşak yüzeyleri, kıvrımlar, çıkmaz sokak uçları
+    for (const nd of nodes.values()) {
+      if (s.rElev[nd.cell] === 2 || !s.road[nd.cell]) continue;
+      if (nd.deg === 1) {
+        const e = nd.ends[0]; const P = e.P;
+        surf.disc(nd.x, nd.y + 0.004, nd.z, P.W / 2, colOf(nd.cell));
+        if (P.SW > 0) this.capWalk(walk, nd, e);
+        continue;
+      }
+      if (nd.deg === 2) {
+        const [e1, e2] = nd.ends; if (e1.d[0] * e2.d[0] + e1.d[1] * e2.d[1] < -0.996) continue; // düz devam
+      }
+      this.junction(surf, walk, nd, colOf(nd.cell));
+    }
     this.add(surf, this.matSurf, false);
     this.add(walk, this.matLit, false);
     this.add(mark, this.matMark, false);
     this.add(struct, this.matLit, true);
     this.add(lamps, this.matLit, false);
     this.add(heads, this.matLamp, false);
+  }
+
+  // Kavşak yüzeyi: kollar açıya göre sıralanır, aralarındaki kaldırım köşeleri kavisle birleştirilir
+  junction(surf, walk, nd, col) {
+    const ends = nd.ends.slice().sort((a, b) => a.ang - b.ang);
+    const y = nd.y + 0.006, m = ends.length;
+    const base = (e) => { const t = e.trim || 0; return [nd.x + e.d[0] * t, nd.z + e.d[1] * t]; };
+    const nrm = (e) => [-e.d[1], e.d[0]];
+    // iki kenar doğrusunun kavisli bağlantısı (kontrol noktası: doğruların düğüm tarafındaki kesişimi)
+    const fillet = (p0, d0, p2, d2) => {
+      const den = d0[0] * d2[1] - d0[1] * d2[0];
+      let ctl = null;
+      if (Math.abs(den) > 0.05) {
+        const a = ((p2[0] - p0[0]) * d2[1] - (p2[1] - p0[1]) * d2[0]) / den;
+        const b = ((p2[0] - p0[0]) * d0[1] - (p2[1] - p0[1]) * d0[0]) / den;
+        if (a < 0.05 && b < 0.05) ctl = [p0[0] + d0[0] * a, p0[1] + d0[1] * a];
+      }
+      const out = [];
+      for (let k = 0; k <= 8; k++) {
+        const t = k / 8;
+        if (!ctl) out.push([p0[0] + (p2[0] - p0[0]) * t, p0[1] + (p2[1] - p0[1]) * t]);
+        else { const u = 1 - t; out.push([u * u * p0[0] + 2 * u * t * ctl[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * ctl[1] + t * t * p2[1]]); }
+      }
+      return out;
+    };
+    const poly = [];
+    for (let i = 0; i < m; i++) {
+      const e = ends[i], f = ends[(i + 1) % m];
+      const B = base(e), n1 = nrm(e), Bf = base(f), n2 = nrm(f);
+      poly.push([B[0] - n1[0] * e.hw, B[1] - n1[1] * e.hw], [B[0] + n1[0] * e.hw, B[1] + n1[1] * e.hw]);
+      const inner = fillet([B[0] + n1[0] * e.hw, B[1] + n1[1] * e.hw], e.d, [Bf[0] - n2[0] * f.hw, Bf[1] - n2[1] * f.hw], f.d);
+      for (let k = 1; k < inner.length - 1; k++) poly.push(inner[k]);
+      // kaldırım köşesi
+      if (e.ow > e.hw + 0.05 || f.ow > f.hw + 0.05) {
+        const outer = fillet([B[0] + n1[0] * e.ow, B[1] + n1[1] * e.ow], e.d, [Bf[0] - n2[0] * f.ow, Bf[1] - n2[1] * f.ow], f.d);
+        for (let k = 0; k < inner.length - 1; k++) {
+          const a0 = inner[k], a1 = inner[k + 1], b0 = outer[k], b1 = outer[k + 1];
+          walk.quad([a0[0], y + 0.15, a0[1]], [a1[0], y + 0.15, a1[1]], [b1[0], y + 0.15, b1[1]], [b0[0], y + 0.15, b0[1]], C_WALK);
+          walk.quad([a0[0], y, a0[1]], [a1[0], y, a1[1]], [a1[0], y + 0.15, a1[1]], [a0[0], y + 0.15, a0[1]], C_CURB);
+          walk.quad([b0[0], y + 0.15, b0[1]], [b1[0], y + 0.15, b1[1]], [b1[0], y - 0.6, b1[1]], [b0[0], y - 0.6, b0[1]], C_CURB);
+        }
+      }
+    }
+    // merkezden yelpaze üçgenleme
+    const c0 = surf.v(nd.x, y, nd.z, col); const first = surf.p.length / 3;
+    for (const q of poly) surf.v(q[0], y, q[1], col);
+    for (let k = 0; k < poly.length; k++) surf.i.push(c0, first + ((k + 1) % poly.length), first + k);
+  }
+
+  // çıkmaz sokak ucunda yarım daire kaldırım
+  capWalk(walk, nd, e) {
+    const y = nd.y; const a0 = Math.atan2(e.d[1], e.d[0]);
+    for (let k = 0; k < 12; k++) {
+      const t0 = a0 + Math.PI / 2 + (k / 12) * Math.PI, t1 = a0 + Math.PI / 2 + ((k + 1) / 12) * Math.PI;
+      const P = (r, t, dy) => [nd.x + Math.cos(t) * r, y + dy, nd.z + Math.sin(t) * r];
+      walk.quad(P(e.hw, t0, 0.15), P(e.hw, t1, 0.15), P(e.ow, t1, 0.15), P(e.ow, t0, 0.15), C_WALK);
+      walk.quad(P(e.hw, t0, 0), P(e.hw, t1, 0), P(e.hw, t1, 0.15), P(e.hw, t0, 0.15), C_CURB);
+    }
   }
 
   tangent(X, Z, k, n) {
@@ -246,11 +341,11 @@ export class SmoothRoads {
     else if (key === 'highway') { line(0, 0.15, C_YEL, true); for (const o of [W / 6, -W / 6, W / 3, -W / 3]) line(o, 0.13, C_WHITE, false); line(W / 2 - 0.4, 0.14, C_WHITE, true); line(-W / 2 + 0.4, 0.14, C_WHITE, true); }
   }
 
-  zebra(mark, L, a, nA, tA, W) {
+  zebra(mark, L, a, nA, tA, W, along = 0) {
     for (let o = -W / 2 + 0.6; o <= W / 2 - 0.5; o += 1.0) {
-      const p = L(a, nA, o, 0.025);
+      const p0 = L(a, nA, o, 0.025); const p = [p0[0] + tA[0] * along, p0[1], p0[2] + tA[1] * along];
       const hw = 0.28, hl = 1.2;
-      mark.quad([p[0] - nA[0] * hw - tA[0] * hl, p[1], p[2] - nA[1] * hw - tA[1] * hl], [p[0] - nA[0] * hw + tA[0] * hl, p[1], p[2] - nA[1] * hw + tA[1] * hl], [p[0] + nA[0] * hw + tA[0] * hl, p[1], p[2] + nA[1] * hw + tA[1] * hl], [p[0] + nA[0] * hw - tA[0] * hl, p[1], p[2] + nA[1] * hw - tA[1] * hl], C_WHITE);
+      mark.quad([p[0] + nA[0] * hw - tA[0] * hl, p[1], p[2] + nA[1] * hw - tA[1] * hl], [p[0] + nA[0] * hw + tA[0] * hl, p[1], p[2] + nA[1] * hw + tA[1] * hl], [p[0] - nA[0] * hw + tA[0] * hl, p[1], p[2] - nA[1] * hw + tA[1] * hl], [p[0] - nA[0] * hw - tA[0] * hl, p[1], p[2] - nA[1] * hw - tA[1] * hl], C_WHITE);
     }
   }
 

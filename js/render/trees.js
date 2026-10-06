@@ -24,6 +24,13 @@ export class TreeView {
       for (let t = 0; t < Math.min(k, keep); t++) {
         const r1 = hash2(x * 7 + t, z, 11), r2 = hash2(x, z * 5 + t, 13), r3 = hash2(x + t, z + t, 17);
         const wx = (x + 0.15 + r1 * 0.7) * CS - HALF, wz = (z + 0.15 + r2 * 0.7) * CS - HALF;
+        // yolun/kaldırımın üstüne taşan ağaçlar çizilmez (CS2'de yol ağaçları temizler)
+        let onRoad = false;
+        for (let dz = -1; dz <= 1 && !onRoad; dz++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, nz = z + dz; if ((!dx && !dz) || nx < 0 || nz < 0 || nx >= N || nz >= N || !s.road[nz * N + nx]) continue;
+          if (Math.hypot(wx - ((nx + 0.5) * CS - HALF), wz - ((nz + 0.5) * CS - HALF)) < 6.4) { onRoad = true; break; }
+        }
+        if (onRoad) continue;
         const y = heightAt(s, wx, wz) - 0.2;
         const sc = 0.8 + r3 * 0.6;
         const conifer = s.res[i] === 2 ? r3 < 0.6 : r3 < 0.25;

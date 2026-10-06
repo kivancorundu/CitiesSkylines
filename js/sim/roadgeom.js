@@ -94,29 +94,162 @@ export function prepareGeom(g) {
   return { samples, chain: samplesToChain(samples) };
 }
 
-// Uç noktayı mevcut bir yol şeridine yapıştır (kusursuz T kavşaklar için)
-export function snapToSegs(s, p, radius = 0.85) {
-  let best = null, bd = radius * radius;
+// ---------------- Yol ağı (düğüm/kenar) ----------------
+// Şeritler kesiştikleri noktada bölünür; böylece her şerit iki düğüm (uç) arasında bir kenar olur.
+// Düğüm = şerit uçlarının çakıştığı nokta; derece ≥3 → kavşak (çizimde kırpılır ve kavşak yüzeyi doldurulur).
+
+// Parçalar için uzamsal ızgara (hücre başına parça listesi)
+function pieceGrid(segs) {
+  const g = new Map();
+  segs.forEach((sg, si) => {
+    const a = sg.p;
+    for (let k = 0; k + 3 < a.length; k += 2) {
+      const x0 = Math.floor(Math.min(a[k], a[k + 2])), x1 = Math.floor(Math.max(a[k], a[k + 2]));
+      const z0 = Math.floor(Math.min(a[k + 1], a[k + 3])), z1 = Math.floor(Math.max(a[k + 1], a[k + 3]));
+      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) { const key = z * 4096 + x; let l = g.get(key); if (!l) g.set(key, (l = [])); l.push(si, k >> 1); }
+    }
+  });
+  return g;
+}
+function gridQuery(g, x, z, r, fn) {
+  const seen = new Set();
+  for (let cz = Math.floor(z - r); cz <= Math.floor(z + r); cz++) for (let cx = Math.floor(x - r); cx <= Math.floor(x + r); cx++) {
+    const l = g.get(cz * 4096 + cx); if (!l) continue;
+    for (let q = 0; q < l.length; q += 2) { const key = l[q] * 1e6 + l[q + 1]; if (seen.has(key)) continue; seen.add(key); fn(l[q], l[q + 1]); }
+  }
+}
+// p noktasının a-b parçasındaki izdüşümü
+function projPiece(px, pz, ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az; const L2 = dx * dx + dz * dz || 1e-9;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / L2));
+  const qx = ax + dx * t, qz = az + dz * t;
+  return { t, x: qx, z: qz, d: Math.hypot(px - qx, pz - qz) };
+}
+// iki parçanın kesişimi (uçlar hariç değil); t,u ∈ [0,1]
+function segX(ax, az, bx, bz, cx, cz, dx, dz) {
+  const rx = bx - ax, rz = bz - az, sx = dx - cx, sz = dz - cz;
+  const den = rx * sz - rz * sx; if (Math.abs(den) < 1e-9) return null;
+  const t = ((cx - ax) * sz - (cz - az) * sx) / den, u = ((cx - ax) * rz - (cz - az) * rx) / den;
+  if (t < -1e-6 || t > 1 + 1e-6 || u < -1e-6 || u > 1 + 1e-6) return null;
+  return { t: Math.max(0, Math.min(1, t)), u: Math.max(0, Math.min(1, u)), x: ax + rx * t, z: az + rz * t };
+}
+
+// En yakın düğüm (şerit ucu) ya da şerit üzerindeki nokta – yeni yolun uçlarını mevcut yola bağlamak için
+export function snapToSegs(s, p, radius = 1.3) {
+  let best = null, bd = radius * 1.25;
+  for (const sg of s.segs || []) {
+    const a = sg.p, n = a.length;
+    for (const k of [0, n - 2]) { const d = Math.hypot(a[k] - p[0], a[k + 1] - p[1]); if (d < bd) { bd = d; best = [a[k], a[k + 1]]; } }
+  }
+  if (best) return best;
+  bd = radius;
   for (const sg of s.segs || []) {
     const a = sg.p;
-    for (let k = 0; k < a.length; k += 2) {
-      const dx = a[k] - p[0], dz = a[k + 1] - p[1]; const d = dx * dx + dz * dz;
-      if (d < bd) { bd = d; best = [a[k], a[k + 1]]; }
+    for (let k = 0; k + 3 < a.length; k += 2) {
+      const q = projPiece(p[0], p[1], a[k], a[k + 1], a[k + 2], a[k + 3]);
+      if (q.d < bd) { bd = q.d; best = [q.x, q.z]; }
     }
   }
   return best;
 }
 
-let nextSegId = 1;
+// Şeridi verilen bölme noktalarında (parça indeksi + t) parçalara ayır
+function splitPoly(pts, cuts) {
+  if (!cuts.length) return [pts];
+  cuts.sort((a, b) => a.k + a.t - (b.k + b.t));
+  const out = []; let cur = [pts[0]]; let ci = 0;
+  for (let k = 0; k < pts.length - 1; k++) {
+    while (ci < cuts.length && cuts[ci].k === k) {
+      const c = cuts[ci++]; const P = [c.x, c.z];
+      const last = cur[cur.length - 1];
+      if (Math.hypot(last[0] - P[0], last[1] - P[1]) > 1e-4) cur.push(P);
+      if (cur.length >= 2) out.push(cur);
+      cur = [P];
+    }
+    const nx = pts[k + 1]; const last = cur[cur.length - 1];
+    if (Math.hypot(last[0] - nx[0], last[1] - nx[1]) > 1e-4) cur.push(nx);
+  }
+  if (cur.length >= 2) out.push(cur);
+  return out.filter((q) => polyLen(q) > 0.05);
+}
+const polyLen = (q) => { let L = 0; for (let k = 1; k < q.length; k++) L += Math.hypot(q[k][0] - q[k - 1][0], q[k][1] - q[k - 1][1]); return L; };
+const toPts = (a) => { const o = []; for (let k = 0; k < a.length; k += 2) o.push([a[k], a[k + 1]]); return o; };
+
+// Yeni şeridi ağa ekle: mevcut yolla çakışan kısımları at, kesişimlerde ve T bağlantılarında iki tarafı da böl
+export function insertNetworkSeg(s, samples) {
+  if (!s.segs) s.segs = [];
+  if (samples.length < 2) return;
+  const segs = s.segs; const grid = pieceGrid(segs);
+  const near = (x, z, r) => { let best = null; gridQuery(grid, x, z, r, (si, k) => { const a = segs[si].p; const q = projPiece(x, z, a[k * 2], a[k * 2 + 1], a[k * 2 + 2], a[k * 2 + 3]); if (q.d <= r && (!best || q.d < best.d)) best = { ...q, si, k, dx: a[k * 2 + 2] - a[k * 2], dz: a[k * 2 + 3] - a[k * 2 + 1] }; }); return best; };
+  // 1) çakışma: mevcut bir yolun üzerinden (paralel) geçen örnekler zaten yol
+  const n = samples.length; const cov = new Uint8Array(n);
+  for (let k = 0; k < n; k++) {
+    const q = near(samples[k][0], samples[k][1], 0.32); if (!q) continue;
+    const a = samples[Math.max(0, k - 1)], b = samples[Math.min(n - 1, k + 1)];
+    const ux = b[0] - a[0], uz = b[1] - a[1]; const L = Math.hypot(ux, uz) * Math.hypot(q.dx, q.dz) || 1;
+    if (Math.abs((ux * q.dx + uz * q.dz) / L) > 0.8) cov[k] = 1;
+  }
+  const runs = []; let cur = null;
+  for (let k = 0; k < n; k++) {
+    if (!cov[k]) { if (!cur) { cur = []; if (k > 0) { const q = near(samples[k - 1][0], samples[k - 1][1], 0.4); cur.push(q ? [q.x, q.z] : samples[k - 1]); } } cur.push(samples[k]); }
+    else if (cur) { const q = near(samples[k][0], samples[k][1], 0.4); cur.push(q ? [q.x, q.z] : samples[k]); runs.push(cur); cur = null; }
+  }
+  if (cur) runs.push(cur);
+  const cutsBySeg = new Map(); const addCut = (si, c) => { let l = cutsBySeg.get(si); if (!l) cutsBySeg.set(si, (l = [])); l.push(c); };
+  const newPieces = [];
+  for (const run of runs) {
+    if (polyLen(run) < 0.3) continue;
+    const cuts = [];
+    // 2) uçlar mevcut şeridin ortasına değiyorsa (T kavşak) o şeridi böl
+    for (const e of [0, run.length - 1]) {
+      const q = near(run[e][0], run[e][1], 0.2); if (!q) continue;
+      run[e] = [q.x, q.z];
+      const a = segs[q.si].p; const atEnd = (q.k === 0 && q.t < 1e-3) || (q.k === a.length / 2 - 2 && q.t > 1 - 1e-3);
+      if (!atEnd) addCut(q.si, { k: q.k, t: q.t, x: q.x, z: q.z });
+    }
+    // 3) kesişimler: her iki şerit de kesişim noktasında bölünür
+    for (let k = 0; k < run.length - 1; k++) {
+      const [ax, az] = run[k], [bx, bz] = run[k + 1];
+      gridQuery(grid, (ax + bx) / 2, (az + bz) / 2, 0.6, (si, j) => {
+        const a = segs[si].p;
+        const X = segX(ax, az, bx, bz, a[j * 2], a[j * 2 + 1], a[j * 2 + 2], a[j * 2 + 3]); if (!X) return;
+        // yeni şeridin uçlarındaki temaslar (2. adımda işlendi)
+        if ((k === 0 && X.t < 1e-3) || (k === run.length - 2 && X.t > 1 - 1e-3)) return;
+        if (cuts.some((c) => Math.hypot(c.x - X.x, c.z - X.z) < 0.15)) return;
+        cuts.push({ k, t: X.t, x: X.x, z: X.z });
+        const atEnd = (j === 0 && X.u < 1e-3) || (j === a.length / 2 - 2 && X.u > 1 - 1e-3);
+        if (!atEnd) addCut(si, { k: j, t: X.u, x: X.x, z: X.z });
+      });
+    }
+    for (const piece of splitPoly(run, cuts)) newPieces.push(piece);
+  }
+  // mevcut şeritleri böl
+  if (cutsBySeg.size) {
+    const out = [];
+    segs.forEach((sg, si) => {
+      const cuts = cutsBySeg.get(si);
+      if (!cuts) { out.push(sg); return; }
+      const uniq = []; for (const c of cuts) if (!uniq.some((u) => Math.hypot(u.x - c.x, u.z - c.z) < 0.1)) uniq.push(c);
+      for (const piece of splitPoly(toPts(sg.p), uniq)) out.push({ id: 0, p: piece.flat() });
+    });
+    s.segs = out;
+  }
+  for (const piece of newPieces) s.segs.push({ id: 0, p: piece.flat() });
+  s.segs.forEach((q, i) => { q.id = i + 1; for (let k = 0; k < q.p.length; k++) q.p[k] = Math.round(q.p[k] * 1000) / 1000; });
+}
+
+// Tüm ağı baştan kur (eski kayıtlar: kesişen/çakışan şeritleri düzelt)
+export function normalizeNetwork(s) {
+  const old = (s.segs || []).slice().sort((a, b) => b.p.length - a.p.length);
+  s.segs = [];
+  for (const sg of old) insertNetworkSeg(s, toPts(sg.p));
+}
+
 export function addSeg(s, samples) {
   if (!s.segs) s.segs = [];
   if (samples.length < 2) return null;
-  const p = new Array(samples.length * 2);
-  for (let k = 0; k < samples.length; k++) { p[k * 2] = Math.round(samples[k][0] * 100) / 100; p[k * 2 + 1] = Math.round(samples[k][1] * 100) / 100; }
-  nextSegId = Math.max(nextSegId, ...s.segs.map((q) => q.id + 1), 1);
-  const sg = { id: nextSegId++, p };
-  s.segs.push(sg);
-  return sg;
+  insertNetworkSeg(s, samples);
+  return true;
 }
 
 // Artık yol olmayan hücrelerdeki örnekleri at; segmentleri boşluklardan böl

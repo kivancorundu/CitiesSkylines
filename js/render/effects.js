@@ -77,9 +77,10 @@ export class Effects {
     this.brush.visible = false; scene.add(this.brush);
     // yol önizleme şeridi (CS2 tarzı yarı saydam hayalet yol)
     this.ribbonGeo = new THREE.BufferGeometry();
-    this.ribbon = new THREE.Mesh(this.ribbonGeo, new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
+    // derinlik testi yok: ağaçların/binaların arkasında kalmaz
+    this.ribbon = new THREE.Mesh(this.ribbonGeo, new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.6, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
     this.ribbon.visible = false; this.ribbon.frustumCulled = false; this.ribbon.renderOrder = 6; scene.add(this.ribbon);
-    this.ribbonEdge = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }));
+    this.ribbonEdge = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false, depthTest: false }));
     this.ribbonEdge.visible = false; this.ribbonEdge.frustumCulled = false; this.ribbonEdge.renderOrder = 7; scene.add(this.ribbonEdge);
     // simgeler
     this.iconGroup = new THREE.Group(); scene.add(this.iconGroup);
@@ -210,6 +211,9 @@ export class Effects {
   // samplesList: hücre koordinatlı örnek dizileri; elev: 0 zemin, 1 yükseltilmiş, 2 tünel, 'auto' mevcut yolun yüksekliği
   showRoadRibbon(s, samplesList, width, ok, elev = 0) {
     const pos = [], ind = [], edge = [];
+    // uzaktan bakınca da görünsün: ekranda en az birkaç piksel genişlik
+    const f = samplesList[0] && samplesList[0][0];
+    if (f) { const cp = this.camera.position; const d = Math.hypot(cp.x - (f[0] * CS - HALF), cp.y, cp.z - (f[1] * CS - HALF)); width = Math.max(width, d * 0.03); }
     for (const sm of samplesList) {
       const n = sm.length; if (n < 2) continue;
       const X = [], Y = [], Z = [];
@@ -231,6 +235,12 @@ export class Effects {
         const nx = -dz * width / 2, nz = dx * width / 2;
         pos.push(X[k] + nx, Y[k], Z[k] + nz, X[k] - nx, Y[k], Z[k] - nz);
         if (k) { const i = b0 + k * 2; ind.push(i - 2, i - 1, i, i - 1, i + 1, i); edge.push(...pos.slice((i - 2) * 3, (i - 1) * 3), ...pos.slice(i * 3, i * 3 + 3), ...pos.slice((i - 1) * 3, i * 3), ...pos.slice((i + 1) * 3, (i + 2) * 3)); }
+      }
+      // uç noktalarında daire (başlangıç / bitiş belirgin olsun)
+      for (const k of [0, n - 1]) {
+        const c0 = pos.length / 3; pos.push(X[k], Y[k], Z[k]);
+        const r = width * 0.62;
+        for (let q = 0; q <= 20; q++) { const t = (q / 20) * Math.PI * 2; pos.push(X[k] + Math.cos(t) * r, Y[k], Z[k] + Math.sin(t) * r); if (q) { ind.push(c0, c0 + q, c0 + q + 1); edge.push(X[k] + Math.cos(t - Math.PI / 10) * r, Y[k], Z[k] + Math.sin(t - Math.PI / 10) * r, X[k] + Math.cos(t) * r, Y[k], Z[k] + Math.sin(t) * r); } }
       }
     }
     if (!ind.length) { this.ribbon.visible = false; this.ribbonEdge.visible = false; return; }

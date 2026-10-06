@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.cjs",
-    "test": "node tests/features.test.mjs && node tests/sim.test.mjs 6 && node tests/bot.mjs 24",
+    "test": "node tests/roads.test.mjs && node tests/features.test.mjs && node tests/sim.test.mjs 6 && node tests/bot.mjs 24",
     "desktop": "electron .",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux",

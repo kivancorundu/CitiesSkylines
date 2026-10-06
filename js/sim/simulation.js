@@ -2,7 +2,7 @@
 import { N, TICKS_PER_MONTH, idx, inB, DIR8 } from '../core/constants.js';
 import { SERVICES } from '../data/services.js';
 import { computeConnectivity, accessCell } from './network.js';
-import { pruneSegs, traceUncovered } from './roadgeom.js';
+import { pruneSegs, traceUncovered, normalizeNetwork } from './roadgeom.js';
 import { computeZonable, growthTick, growthSlow } from './growth.js';
 import { computeCoverage, computeNearRoad } from './coverage.js';
 import { computeNetworks, allocateUtilities } from './utilities.js';
@@ -26,6 +26,8 @@ export function initRuntime(s) {
   computeWaterDist(s);
   if (!s.segs) s.segs = [];
   pruneSegs(s); traceUncovered(s);
+  // ağ sürüm 2: kesişimlerde bölünmüş şeritler (eski kayıtlar bir kez dönüştürülür)
+  if ((s.netV || 0) < 2) { normalizeNetwork(s); s.netV = 2; }
   refreshRoads(s);
   computeNetworks(s); s.rt.dirty.util = false;
   weatherTick(s);

@@ -36,10 +36,10 @@ export class TouchControls {
     if (this.pts.size === 1) {
       const t = e.changedTouches[0];
       this.mode = this.isDragTool() ? 'tool' : 'pan';
-      if (this.mode === 'tool') { this.T.onMove(this.fake(t)); this.T.onDown(this.fake(t)); }
+      if (this.mode === 'tool') { this.T.onMove(this.fake(t)); this.T.onDown(this.fake(t)); this.dragUI(true); }
     } else if (this.pts.size === 2) {
       // tek parmakla başlayan araç işlemini iptal et, iki parmak hareketine geç
-      if (this.mode === 'tool') { this.T.mouseDown = false; this.T.cancel(); }
+      if (this.mode === 'tool') { this.T.mouseDown = false; this.T.cancel(); this.dragUI(false); }
       this.mode = 'gesture'; this.gest = this.gesture(); this.gestKind = null; this.gestAcc = { dx: 0, dy: 0, dd: 0, same: 0 };
     }
   }
@@ -54,7 +54,7 @@ export class TouchControls {
     if (this.g.inMenu) return;
     for (const t of e.changedTouches) { const p = this.pts.get(t.identifier); if (p) { const [x, y] = toLayout(t.clientX, t.clientY); p.px = p.x; p.py = p.y; p.x = x; p.y = y; } }
     const o = options().touch;
-    if (this.mode === 'tool' && this.pts.size === 1) { const t = e.changedTouches[0]; this.T.onMove(this.fake(t)); }
+    if (this.mode === 'tool' && this.pts.size === 1) { const t = e.changedTouches[0]; this.T.onMove(this.fake(t)); if (this.T.cursorText) this.g.ui.setHint(this.T.cursorText); }
     else if (this.mode === 'pan' && this.pts.size === 1) {
       const p = [...this.pts.values()][0];
       const dx = p.x - (p.px ?? p.x), dy = p.y - (p.py ?? p.y);
@@ -84,13 +84,21 @@ export class TouchControls {
     const t = e.changedTouches[0];
     const p = this.pts.get(t.identifier);
     for (const tt of e.changedTouches) this.pts.delete(tt.identifier);
-    if (this.mode === 'tool') { this.T.onMove(this.fake(t)); this.T.onUp(this.fake(t)); }
+    if (this.mode === 'tool') { this.T.onMove(this.fake(t)); this.T.onUp(this.fake(t)); this.dragUI(false); this.g.ui.setHint(this.T.hintText()); }
     else if (this.mode === 'pan' && p) {
       const isTap = Math.hypot(p.x - p.sx, p.y - p.sy) < 12 && performance.now() - p.t0 < 450;
       if (isTap) this.tap(t);
     }
     if (this.pts.size === 0) { this.mode = null; this.moved = false; }
     else if (this.pts.size === 1 && this.mode === 'gesture') { this.mode = 'none'; }
+  }
+
+  // araçla sürüklerken haritayı kapatan panelleri geçici olarak gizle (önizleme görünsün)
+  dragUI(on) {
+    for (const id of ['flyout', 'tool-opts', 'tool-info', 'advisor', 'cam-btns', 'panel', 'inspector']) {
+      const el = document.getElementById(id); if (!el) continue;
+      el.style.opacity = on ? '0' : ''; el.style.pointerEvents = on ? 'none' : '';
+    }
   }
 
   tap(t) {
