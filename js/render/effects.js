@@ -207,7 +207,7 @@ export class Effects {
   }
   hideCells() { this.cellGhost.count = 0; this.ribbon.visible = false; this.ribbonEdge.visible = false; }
 
-  // samplesList: hücre koordinatlı örnek dizileri; elev: 0 zemin, 1 yükseltilmiş, 2 tünel
+  // samplesList: hücre koordinatlı örnek dizileri; elev: 0 zemin, 1 yükseltilmiş, 2 tünel, 'auto' mevcut yolun yüksekliği
   showRoadRibbon(s, samplesList, width, ok, elev = 0) {
     const pos = [], ind = [], edge = [];
     for (const sm of samplesList) {
@@ -217,9 +217,10 @@ export class Effects {
         const x = p[0] * CS - HALF, z = p[1] * CS - HALF;
         const c = Math.min(N - 1, Math.max(0, Math.floor(p[1]))) * N + Math.min(N - 1, Math.max(0, Math.floor(p[0])));
         let y = Math.max(heightAt(s, x, z), -0.2);
+        const el = elev === 'auto' ? s.rElev[c] : elev;
         if (s.water[c]) y = 3.2;
-        if (elev === 1) y = Math.max(y, 0) + 7.5;
-        X.push(x); Y.push(y + 0.45 + (elev === 2 ? 0.3 : 0)); Z.push(z);
+        if (el === 1) y = Math.max(y, 0) + 7.5;
+        X.push(x); Y.push(y + 0.45 + (el === 2 ? 0.3 : 0)); Z.push(z);
       }
       for (let k = 1; k < n; k++) Y[k] = Math.max(Y[k], Y[k - 1] - CS * 0.25 * 0.22);
       for (let k = n - 2; k >= 0; k--) Y[k] = Math.max(Y[k], Y[k + 1] - CS * 0.25 * 0.22);

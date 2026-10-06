@@ -16,6 +16,7 @@ npm install && npm run desktop   # masaüstü (Electron) sürümü
 - **PC (Windows/macOS/Linux):** `desktop/` klasöründeki Electron sarmalayıcısı oyunu yerel bir uygulama olarak açar (`npm run desktop`). `npm run dist:win|dist:mac|dist:linux` komutları için `electron-builder` kurulmalıdır (`npm i -D electron-builder`).
 - **Steam:** Yayın için Steamworks hesabı (Steam Direct ücreti), uygulama kimliği ve Steamworks SDK entegrasyonu (başarımlar, bulut kayıt) gerekir; Electron derlemesi Steam'e "depot" olarak yüklenir. Bu entegrasyon henüz yapılmadı.
 - **Mobil:** Oyun dokunmatik kontrollerle mobil tarayıcıda çalışır (tek parmak kaydır/araç, iki parmak yakınlaştır/döndür, iki parmakla yukarı/aşağı sürükleyerek 3D eğim, 🎥 kamera görünümü ve diğer ekran düğmeleri). Uygulama mağazaları için Capacitor veya benzeri bir sarmalayıcıyla paketlenebilir.
+- **Telefonda tam ekran:** Ana menüdeki **Tam Ekran** ya da oyun içindeki sağ alt **⛶** düğmesi (Android Chrome, iPad). iPhone Safari sayfalarda tam ekranı desteklemez: oyunu kendi adresinden açıp **Paylaş → Ana Ekrana Ekle** deyin; ana ekrandaki simgeden açılınca adres çubuğu olmadan uygulama gibi tam ekran çalışır (`manifest.webmanifest`). Android'de de Chrome menüsü → **Ana ekrana ekle** aynı şekilde tam ekran açar.
 
 Herhangi bir statik sunucu da olur (ör. `python3 -m http.server`). ES modülleri kullanıldığı için `index.html` dosyasını doğrudan çift tıklayarak (file://) açmak çalışmaz.
 
@@ -80,6 +81,8 @@ CS2'nin özellikleri tek tek ele alınıp (kilometre taşı listesi, bölge tür
 - Otoyollarda bariyerler, eğimli arazide yokuşlar, sokak lambaları
 - **Yol yükseltmeleri**: ağaçlar, çim şerit, hız tümseği
 - Düz, kavisli, sürekli, ızgara ve değiştir modları; yükseltilmiş yollar ve tüneller
+- **Değiştir** modu (CS2 gibi): tek dokunuş iki kavşak arasındaki yol parçasını, sürükleme baştan sona tüm güzergâhı yeni türe çevirir; hayalet şerit önizlemesi gösterilir
+- Eski kayıtlardaki hücre tabanlı (merdiven görünümlü) yollar yüklenirken otomatik olarak pürüzsüz eğrilere çevrilir
 - Yolların altından geçen alçak gerilim (CS2'deki gibi yollar elektrik taşır)
 - **Trafik simülasyonu**: A* ile yol bulan yolculuklar (ev→iş, ev→alışveriş, sanayi kamyonları), sıkışıklık, trafik akışı istatistiği, hareketli araçlar
 - **Toplu taşıma hatları**: Otobüs, Tramvay (tramvay rayı ile), Metro (yeraltı tünel + istasyon), Tren (ray + istasyon); depo/garaj gereksinimi, araç sayısı, yolcu ve bilet geliri, hat renkleri

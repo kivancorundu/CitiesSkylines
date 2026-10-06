@@ -10,7 +10,7 @@ import { UI } from './ui/ui.js';
 import { Tools } from './ui/tools.js';
 import { Menus } from './ui/menus.js';
 import { TouchControls } from './ui/touch.js';
-import { options, onOptions, IS_TOUCH } from './core/options.js';
+import { options, onOptions, setOption, IS_TOUCH } from './core/options.js';
 import { buildDemoCity } from './core/demo.js';
 import { setBuildingTheme } from './render/buildingParts.js';
 
@@ -26,6 +26,7 @@ class Game {
     this.tools = new Tools(this);
     this.menus = new Menus(this);
     this.touch = new TouchControls(this);
+    this.bindFullscreen();
     this.last = performance.now(); this.lastFrame = 0;
     this.autosaveT = 0;
     onOptions(() => this.applyOptions());
@@ -51,10 +52,43 @@ class Game {
     if (this.state && !this.inMenu) this.syncStateSettings();
     const fs = !!o.graphics.fullscreen;
     if (window.electronAPI?.setFullscreen) window.electronAPI.setFullscreen(fs);
-    else if (fs && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
-    else if (!fs && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    else if (fs && !this.isFullscreen()) this.enterFullscreen(true);
+    else if (!fs && this.isFullscreen()) this.exitFullscreen();
     if (this.ambGain) this.ambGain.gain.value = o.audio.mute ? 0 : o.audio.master * o.audio.ambient * 0.05;
   }
+  // ---------- tam ekran (telefon dahil) ----------
+  isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  // ana ekrandan uygulama olarak mı açıldı (açılışta ölçülür; tam ekran API'si de display-mode'u değiştirdiği için)
+  isStandalone() {
+    if (this._standalone === undefined) this._standalone = navigator.standalone === true || (!this.isFullscreen() && matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches);
+    return this._standalone;
+  }
+  enterFullscreen(quiet = false) {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) {
+      // iPhone Safari sayfalar için tam ekranı desteklemez: ana ekrana eklenince uygulama gibi tam ekran açılır
+      if (!quiet) this.ui.toast(/iPhone|iPod/.test(navigator.userAgent) ? 'iPhone\'da tam ekran için: Paylaş ⬆️ → "Ana Ekrana Ekle", sonra oyunu ana ekrandaki simgeden açın.' : 'Bu tarayıcı tam ekranı desteklemiyor. Menüden "Ana ekrana ekle" ile uygulama gibi tam ekran açabilirsiniz.');
+      return;
+    }
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      if (p && p.catch) p.catch(() => { if (!quiet) this.ui.toast('Tarayıcı tam ekrana izin vermedi. Oyunu kendi sekmesinde açıp tekrar deneyin veya "Ana ekrana ekle"yi kullanın.', 'bad'); });
+    } catch { /* izin yok */ }
+  }
+  exitFullscreen() { const d = document; const ex = d.exitFullscreen || d.webkitExitFullscreen; if (ex) { const p = ex.call(d); if (p && p.catch) p.catch(() => {}); } }
+  toggleFullscreen() {
+    if (window.electronAPI?.setFullscreen) { setOption('graphics', 'fullscreen', !options().graphics.fullscreen); return; }
+    if (this.isFullscreen()) this.exitFullscreen(); else this.enterFullscreen();
+  }
+  bindFullscreen() {
+    document.body.classList.toggle('standalone', this.isStandalone());
+    const sync = () => { const fs = this.isFullscreen(); document.body.classList.toggle('is-fs', fs); document.querySelectorAll('.fs-btn').forEach((b) => { b.title = fs ? 'Tam ekrandan çık' : 'Tam ekran'; }); };
+    document.addEventListener('fullscreenchange', sync); document.addEventListener('webkitfullscreenchange', sync);
+    document.querySelectorAll('.fs-btn').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); this.toggleFullscreen(); }));
+    sync();
+  }
+
   syncStateSettings() {
     const o = options(), st = this.state.settings;
     st.disasters = o.gameplay.disasters; st.autoDemolish = o.gameplay.autoDemolish; st.dayNight = o.graphics.dayNight; st.advisor = o.general.tutorial && st.advisor !== false;

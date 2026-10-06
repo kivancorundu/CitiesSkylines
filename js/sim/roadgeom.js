@@ -1,7 +1,7 @@
 // Pürüzsüz yol geometrisi (CS2 tarzı): her yol bir eğri şerit (segment) olarak saklanır.
 // Segment = 2 m aralıklı örnek noktaları (hücre koordinatında, hücre merkezi = x + 0.5).
 // Simülasyon, örneklerin geçtiği hücreleri yol hücresi olarak kullanır.
-import { N, idx, inB } from '../core/constants.js';
+import { N, idx, inB, eachRoadNbr } from '../core/constants.js';
 import { rasterLine8, bezier } from './roadtool.js';
 
 export const STEP = 0.25; // hücre (2 m)
@@ -159,7 +159,7 @@ export function traceUncovered(s) {
   const make = (path) => {
     if (!path.some((c) => !cov[c])) return;
     const pts = path.map((c) => [(c % N) + 0.5, ((c / N) | 0) + 0.5]);
-    addSeg(s, resample(roundCorners(pts), STEP));
+    addSeg(s, relaxSamples(s, resample(roundCorners(simplifyCells(pts)), STEP)));
   };
   for (let i = 0; i < C; i++) {
     if (!s.road[i] || cov[i]) continue;
@@ -173,6 +173,83 @@ export function traceUncovered(s) {
     if (!s.road[i] || cov[i]) continue;
     for (const j of nbrs(i)) if (!usedEdge.has(ek(i, j))) make(walk(i, j));
   }
+}
+
+// Eski (hücre tabanlı) yollar için: merdiven basamaklarını düzleştir (yalnızca köşe noktaları kalsın)
+function simplifyCells(pts) {
+  if (pts.length < 3) return pts;
+  // ardışık kısa basamakları birleştir: yön değişimlerinin orta noktalarını köşe say
+  const out = [pts[0]];
+  for (let k = 1; k < pts.length - 1; k++) {
+    const a = pts[k - 1], b = pts[k], c = pts[k + 1];
+    const d1x = Math.sign(b[0] - a[0]), d1z = Math.sign(b[1] - a[1]), d2x = Math.sign(c[0] - b[0]), d2z = Math.sign(c[1] - b[1]);
+    if (d1x !== d2x || d1z !== d2z) out.push(b);
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+
+// Örnekleri komşu ortalamasıyla gevşet; uçlar sabit, hiçbir örnek yol olmayan hücreye taşmaz
+export function relaxSamples(s, sm, passes = 12) {
+  const n = sm.length; if (n < 5) return sm;
+  let P = sm.map((p) => p.slice());
+  for (let it = 0; it < passes; it++) {
+    const Q = P.map((p) => p.slice());
+    for (let k = 2; k < n - 2; k++) {
+      const x = (P[k - 2][0] + P[k - 1][0] * 2 + P[k][0] * 2 + P[k + 1][0] * 2 + P[k + 2][0]) / 8;
+      const z = (P[k - 2][1] + P[k - 1][1] * 2 + P[k][1] * 2 + P[k + 1][1] * 2 + P[k + 2][1]) / 8;
+      if (s.road[cellOfPt([x, z])]) { Q[k][0] = x; Q[k][1] = z; }
+    }
+    P = Q;
+  }
+  return resample(P, STEP);
+}
+
+// "Değiştir" aracı: iki kavşak arasındaki yol parçası (CS2'deki gibi tek tıkla tüm parça)
+export function roadStretch(s, i) {
+  if (!s.road[i]) return [];
+  const deg = (c) => { let n = 0; eachRoadNbr(s, c, (j) => { if (s.road[j]) n++; }); return n; };
+  if (deg(i) !== 2) return [i];
+  const seen = new Set([i]); const out = [i];
+  const stack = [i];
+  while (stack.length) {
+    const c = stack.pop();
+    eachRoadNbr(s, c, (j) => {
+      if (!s.road[j] || seen.has(j)) return;
+      seen.add(j);
+      if (deg(j) === 2) { out.push(j); stack.push(j); }
+    });
+  }
+  return out;
+}
+
+// İki yol hücresi arasındaki en kısa yol ağı güzergâhı (BFS)
+export function roadPath(s, a, b, limit = 6000) {
+  if (!s.road[a] || !s.road[b]) return [];
+  if (a === b) return [a];
+  const prev = new Map([[a, -1]]); const q = [a]; let h = 0;
+  while (h < q.length && q.length < limit) {
+    const c = q[h++];
+    if (c === b) break;
+    eachRoadNbr(s, c, (j) => { if (s.road[j] && !prev.has(j)) { prev.set(j, c); q.push(j); } });
+  }
+  if (!prev.has(b)) return [];
+  const out = []; for (let c = b; c !== -1; c = prev.get(c)) out.push(c);
+  return out.reverse();
+}
+
+// Verilen hücrelerden geçen şerit örnekleri (önizleme şeridi için), kesintisiz parçalara bölünmüş
+export function samplesInCells(s, cells) {
+  const set = cells instanceof Set ? cells : new Set(cells); const out = [];
+  for (const sg of s.segs || []) {
+    let run = [];
+    for (let k = 0; k < sg.p.length; k += 2) {
+      const p = [sg.p[k], sg.p[k + 1]];
+      if (set.has(cellOfPt(p))) run.push(p); else { if (run.length >= 2) out.push(run); run = []; }
+    }
+    if (run.length >= 2) out.push(run);
+  }
+  return out;
 }
 
 export function cloneSegs(s) { return (s.segs || []).map((q) => ({ id: q.id, p: q.p.slice() })); }

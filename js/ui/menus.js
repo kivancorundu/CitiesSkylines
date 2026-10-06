@@ -98,6 +98,7 @@ export class Menus {
           ${item('new', 'Yeni Oyun')}
           ${item('load', 'Oyun Yükle', !last)}
           ${item('options', 'Seçenekler')}
+          ${IS_TOUCH && !window.electronAPI && !this.g.isStandalone() ? item('fullscreen', this.g.isFullscreen() ? 'Tam Ekrandan Çık' : 'Tam Ekran', false, 'Telefonda tüm ekranı kullan') : ''}
           ${item('credits', 'Krediler')}
           ${item('quit', 'Çıkış')}
         </nav>
@@ -113,6 +114,7 @@ export class Menus {
     else if (a === 'load') this.showLoad(() => this.showMain());
     else if (a === 'options') this.showOptions(() => this.showMain());
     else if (a === 'credits') this.showCredits();
+    else if (a === 'fullscreen') { this.g.toggleFullscreen(); setTimeout(() => { if (this.g.inMenu) this.showMain(); }, 400); }
     else if (a === 'quit') this.quit();
   }
   quit() {

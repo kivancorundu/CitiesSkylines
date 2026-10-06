@@ -8,7 +8,7 @@ import { newLine, computeLinePath } from '../js/sim/transit.js';
 import { startFire, spawnTornado } from '../js/sim/events.js';
 import { unlockNode } from '../js/sim/progression.js';
 import { MILESTONES } from '../js/data/progression.js';
-import { geomsFor } from '../js/sim/roadgeom.js';
+import { geomsFor, traceUncovered, roadStretch, roadPath, samplesInCells } from '../js/sim/roadgeom.js';
 import { refreshRoads } from '../js/sim/simulation.js';
 
 const s = createState(4242);
@@ -76,5 +76,33 @@ assert.equal(MILESTONES.length, 21);
   const segAfter = v.segs.length; A.undoLast(v); assert.ok(v.segs.length < segAfter, 'geri al şeridi kaldırır');
   const v2 = deserialize(serialize(v)); initRuntime(v2); assert.equal(v2.segs.length, v.segs.length, 'şeritler kaydedilir');
   console.log('köprü + pürüzsüz yol testleri geçti', v.segs.length, 'şerit');
+  // eski kayıt: hücre tabanlı merdiven yol → izlenen şerit yumuşak olmalı ve yol hücrelerinde kalmalı
+  const bx = w0 - 40, bz = rz - 30; const stair = [];
+  for (let k = 0; k < 12; k++) { stair.push([bx + k, bz + k]); stair.push([bx + k + 1, bz + k]); }
+  assert.ok(A.buildRoad(v, stair, 1).ok, 'merdiven yol');
+  const stairSet = new Set(stair.map(([x, z]) => idx(x, z)));
+  v.segs = v.segs.filter((q) => { for (let k = 0; k < q.p.length; k += 2) if (stairSet.has(idx(Math.floor(q.p[k]), Math.floor(q.p[k + 1])))) return false; return true; });
+  traceUncovered(v);
+  const tr = v.segs.filter((q) => { for (let k = 0; k < q.p.length; k += 2) if (stairSet.has(idx(Math.floor(q.p[k]), Math.floor(q.p[k + 1])))) return true; return false; });
+  assert.ok(tr.length >= 1, 'merdiven yol izlendi');
+  let maxTurn = 0;
+  for (const q of tr) {
+    for (let k = 0; k < q.p.length; k += 2) assert.ok(v.road[idx(Math.floor(q.p[k]), Math.floor(q.p[k + 1]))], 'örnek yol hücresinde');
+    const P = []; for (let k = 0; k < q.p.length; k += 2) P.push([q.p[k], q.p[k + 1]]);
+    for (let k = 6; k < P.length - 6; k += 2) {
+      const a1 = Math.atan2(P[k][1] - P[k - 2][1], P[k][0] - P[k - 2][0]), a2 = Math.atan2(P[k + 2][1] - P[k][1], P[k + 2][0] - P[k][0]);
+      let d = Math.abs(a2 - a1); if (d > Math.PI) d = 2 * Math.PI - d; maxTurn = Math.max(maxTurn, d);
+    }
+  }
+  assert.ok(maxTurn < 0.6, 'merdiven yol yumuşatıldı (en büyük dönüş ' + maxTurn.toFixed(2) + ' rad)');
+  // "Değiştir": tek tıkla iki kavşak arası parça
+  const mid = idx(w0 - 5, rz + 5); assert.ok(v.road[mid], 'köprü yolu hücresi');
+  const stretch = roadStretch(v, mid); assert.ok(stretch.length > 5, 'parça bulundu: ' + stretch.length);
+  const rr = A.buildRoadChains(v, [stretch.map((c) => [c % N, (c / N) | 0])], 3, { replace: true });
+  assert.ok(rr.ok, 'yol değiştirildi: ' + rr.msg);
+  assert.ok(stretch.every((c) => v.road[c] === 3), 'parçanın tamamı yeni türde');
+  const pth = roadPath(v, idx(w0 - 8, rz + 5), idx(w1 + 8, rz + 5)); assert.ok(pth.length > 10, 'güzergâh bulundu');
+  assert.ok(samplesInCells(v, stretch).length >= 1, 'önizleme örnekleri');
+  console.log('eski yol yumuşatma + değiştir testleri geçti, en büyük dönüş', maxTurn.toFixed(2));
 }
 console.log('TÜM ÖZELLİK TESTLERİ GEÇTİ');

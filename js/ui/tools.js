@@ -9,7 +9,7 @@ import { tileCost, allowedTiles, ownedTiles } from '../sim/progression.js';
 import { newLine, computeLinePath, LINE_TYPES } from '../sim/transit.js';
 import { zoneCellOk } from '../sim/growth.js';
 import { chainsFor, snapAngle, snapLength } from '../sim/roadtool.js';
-import { geomsFor } from '../sim/roadgeom.js';
+import { geomsFor, roadStretch, roadPath, samplesInCells } from '../sim/roadgeom.js';
 import { WIDTH as ROAD_W } from '../render/smoothroads.js';
 import { options } from '../core/options.js';
 import { refreshRoads } from '../sim/simulation.js';
@@ -80,7 +80,7 @@ export class Tools {
         const m = this.lineMode();
         if (m === 'curved') return `${c}: başlangıç → kontrol noktası → bitiş. ${touch ? '' : 'Sağ tık: iptal'}`;
         if (m === 'grid') return `${c}: ızgaranın iki köşesini seçin.`;
-        if (m === 'replace') return 'Değiştirmek istediğiniz yolun başını ve sonunu seçin.';
+        if (m === 'replace') return `${c}: iki kavşak arasındaki yol parçasını değiştir · Sürükle: başlangıçtan bitişe kadar tüm güzergâhı değiştir.`;
         if (m === 'continuous') return `${c}: noktaları art arda seçin; her bitiş yeni başlangıçtır. ${touch ? 'Bitirmek için İptal' : 'Sağ tık: bitir'}`;
         return `${c}: başlangıç → bitiş (sürükleyebilirsiniz). ${t.type !== 'road' ? (touch ? 'Silgi modu: kaldır' : 'Shift: kaldır') : ''}`;
       }
@@ -150,6 +150,15 @@ export class Tools {
     this.mouseDown = false;
     const h = this.hover, t = this.tool;
     if (!this.s) return;
+    // "Değiştir": sürüklemeden tıklama → tüm parça, sürükleme → güzergâh
+    if (t.type === 'road' && this.lineMode() === 'replace' && this.pts.length === 1) {
+      const dragged = h && this.downCell && (h.x !== this.downCell[0] || h.z !== this.downCell[1]);
+      const cells = this.replaceCells(!!dragged);
+      if (cells.length) this.commitChains([cells.map((c) => [c % N, (c / N) | 0])]);
+      else this.g.ui.toast('Değiştirmek için bir yola tıklayın', 'bad');
+      this.pts = []; this.downCell = null; this.refresh(); this.g.ui.renderToolPanels();
+      return;
+    }
     // sürükleme ile ikinci nokta
     if (this.isLineTool() && this.pts.length === 1 && h && this.downCell && (h.x !== this.downCell[0] || h.z !== this.downCell[1]) && (h.x !== this.pts[0][0] || h.z !== this.pts[0][1])) {
       this.addPoint(this.snapPoint(h));
@@ -232,8 +241,26 @@ export class Tools {
     return geomsFor(m, pts, { gridSpacing: ro.gridSp, parallel: ro.parallel, parallelSpacing: ro.parSp });
   }
 
+  // "Değiştir" modu: imlecin altındaki/yakınındaki yol hücresi
+  roadCellNear(p) {
+    if (!p) return -1; const s = this.s;
+    let best = -1, bd = 9;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const x = p[0] + dx, z = p[1] + dz; if (inB(x, z) && s.road[idx(x, z)]) { const d = dx * dx + dz * dz; if (d < bd) { bd = d; best = idx(x, z); } } }
+    return best;
+  }
+
+  // değiştirilecek hücreler: tek nokta → kavşaktan kavşağa parça; iki nokta → yol ağı üzerindeki güzergâh
+  replaceCells(withHover = true) {
+    const s = this.s; const a = this.pts.length ? this.roadCellNear(this.pts[0]) : -1;
+    const hv = withHover && this.hover ? this.roadCellNear([this.hover.x, this.hover.z]) : -1;
+    if (a >= 0 && hv >= 0 && a !== hv) return roadPath(s, a, hv);
+    const c = a >= 0 ? a : hv;
+    return c >= 0 ? roadStretch(s, c) : [];
+  }
+
   chains(withHover = true) {
     if (this.smoothRoad()) return A.prepareRoadGeoms(this.s, this.geoms(withHover)).chains;
+    if (this.tool.type === 'road' && this.lineMode() === 'replace') { const cells = this.replaceCells(withHover); return cells.length ? [cells.map((c) => [c % N, (c / N) | 0])] : []; }
     const pts = this.rawPts(withHover);
     if (!pts.length) return [];
     const mode = this.lineMode(); const ro = this.o.road;
@@ -381,6 +408,7 @@ export class Tools {
       case 'road': case 'net': case 'upgrade': {
         let chains, plan, samples = null;
         if (this.smoothRoad()) { const pr = A.prepareRoadGeoms(s, this.geoms(true)); chains = pr.chains; samples = pr.samplesList; }
+        else if (t.type === 'road' && this.lineMode() === 'replace') { chains = this.chains(true); samples = chains.length ? samplesInCells(s, chains[0].map(([x, z]) => idx(x, z))) : []; }
         else chains = this.chains(true);
         if (t.type === 'road') plan = A.planRoadChains(s, chains, t.road, { elev: this.o.road.elev, replace: this.o.road.mode === 'replace' });
         else {
@@ -396,7 +424,7 @@ export class Tools {
           const bad = plan.cells.filter((c) => !c.ok && !c.skip);
           fx.showCells(s, bad.map((c) => [c.x, c.z, 0xe04040]), null, 0.4);
           const ok = !bad.length && plan.cost <= s.money;
-          fx.showRoadRibbon(s, samples, (ROAD_W[ROADS[t.road].key] || 7) + 1.2, ok, this.o.road.elev);
+          fx.showRoadRibbon(s, samples, (ROAD_W[ROADS[t.road].key] || 7) + 1.2, ok, this.lineMode() === 'replace' ? 'auto' : this.o.road.elev);
           for (const sm of samples) for (let k = 1; k < sm.length; k++) len += Math.hypot(sm[k][0] - sm[k - 1][0], sm[k][1] - sm[k - 1][1]);
           len = Math.round(len);
         } else {

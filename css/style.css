@@ -311,7 +311,11 @@ body.in-menu .ui, body.in-menu #hint, body.in-menu #toasts, body.in-menu #cursor
 body.cam-buttons #cam-btns { display: grid; grid-template-columns: 44px 44px; }
 #cam-btns button { width: 44px; height: 44px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-size: 18px; touch-action: none; }
 #cam-btns button:active { background: var(--accent); color: #002; }
-#cam-view { font-size: 16px !important; }
+#cam-view, #cam-fs { font-size: 16px !important; }
+#cam-back { grid-column: span 2; width: 94px !important; }
+/* tam ekrandayken / ana ekrandan açılınca tam ekran düğmesi gizlenir */
+body.is-fs .fs-btn { opacity: 0.55; }
+body.standalone .fs-btn { display: none !important; }
 
 /* ===================== MOBİL YERLEŞİM ===================== */
 #c { touch-action: none; }

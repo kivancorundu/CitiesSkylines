@@ -22,6 +22,8 @@
     "productName": "Şehir Kurucu II",
     "files": [
       "index.html",
+      "manifest.webmanifest",
+      "icons/**",
       "css/**",
       "js/**",
       "desktop/**"

@@ -6,6 +6,10 @@
   <meta name="theme-color" content="#0b1424" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Şehir Kurucu" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-180.png" />
   <title>Şehir Kurucu II</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -15,6 +19,7 @@
   <div id="topbar" class="ui">
     <div class="tb-left">
       <button id="btn-menu" class="tbtn" title="Ana Menü (Esc)">☰</button>
+      <button id="btn-fs" class="tbtn fs-btn" title="Tam ekran (F11)">⛶</button>
       <button data-panel="info" class="tbtn" title="Bilgi Görünümleri (I)">📊</button>
       <button data-panel="econ" class="tbtn" title="Ekonomi (B)">💰</button>
       <button data-panel="prog" class="tbtn" title="İlerleme ve Gelişim Ağacı (P)">🏆</button>
@@ -78,7 +83,8 @@
     <button data-cam="rotL" title="Sola döndür">⟲</button><button data-cam="rotR" title="Sağa döndür">⟳</button>
     <button data-cam="up" title="Eğimi artır">▲</button><button data-cam="down" title="Eğimi azalt">▼</button>
     <button data-cam="zin" title="Yakınlaştır">＋</button><button data-cam="zout" title="Uzaklaştır">－</button>
-    <button id="cam-view" title="Kamera görünümü (V)">🎥</button><button id="cam-back" title="Geri / İptal">✖</button>
+    <button id="cam-view" title="Kamera görünümü (V)">🎥</button><button id="cam-fs" class="fs-btn" title="Tam ekran">⛶</button>
+    <button id="cam-back" title="Geri / İptal">✖</button>
   </div>
   <div id="menu-root" class="menu-root hidden"></div>
   <div id="dialog" class="hidden"></div>

@@ -10,7 +10,7 @@ import { addXP, serviceUnlocked, zoneUnlocked, isUnlocked, allowedTiles, ownedTi
 import { zoneCellOk } from './growth.js';
 import { refreshRoads } from './simulation.js';
 import { fixCrossings, linkCells, unlinkAll, snapshotCells, restoreCells, neighborhood } from './roadtool.js';
-import { addSeg, pruneSegs, cloneSegs, resample, roundCorners, STEP, snapToSegs, prepareGeom } from './roadgeom.js';
+import { addSeg, pruneSegs, cloneSegs, relaxSamples, resample, roundCorners, STEP, snapToSegs, prepareGeom } from './roadgeom.js';
 
 const ownedCell = (s, x, z) => !!s.owned[tileOf(x, z)];
 
@@ -83,7 +83,7 @@ export function buildRoadChains(s, chains, type, opt = {}) {
   }
   if (!opt.replace) {
     if (opt.samplesList) for (const sm of opt.samplesList) addSeg(s, sm);
-    else for (const ch of chains) addSeg(s, resample(roundCorners(simplifyChain(ch).map(([x, z]) => [x + 0.5, z + 0.5])), STEP));
+    else for (const ch of chains) addSeg(s, relaxSamples(s, resample(roundCorners(simplifyChain(ch).map(([x, z]) => [x + 0.5, z + 0.5])), STEP)));
     pruneSegs(s);
   }
   s.money -= plan.cost;
