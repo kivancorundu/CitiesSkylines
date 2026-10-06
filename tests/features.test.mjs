@@ -8,6 +8,8 @@ import { newLine, computeLinePath } from '../js/sim/transit.js';
 import { startFire, spawnTornado } from '../js/sim/events.js';
 import { unlockNode } from '../js/sim/progression.js';
 import { MILESTONES } from '../js/data/progression.js';
+import { geomsFor } from '../js/sim/roadgeom.js';
+import { refreshRoads } from '../js/sim/simulation.js';
 
 const s = createState(4242);
 initRuntime(s);
@@ -56,4 +58,23 @@ assert.deepEqual(Array.from(s2.road.slice(0, 2000)), Array.from(s.road.slice(0, 
 for (let t = 0; t < 240; t++) tick(s2);
 console.log('yükleme sonrası nüfus', s2.stats.pop, 'kayıt boyutu', (json.length / 1024).toFixed(0) + ' KB');
 assert.equal(MILESTONES.length, 21);
+// pürüzsüz yollar + köprüler: su üzerinden çekilen yol köprü olur, yanına bölge/bina yapılamaz
+{
+  const v = createState(77, 'Köprü', 'valley', {}); initRuntime(v); v.money = 1e9; v.owned.fill(1);
+  const rz = N / 2; let w0 = -1, w1 = -1; for (let x = 0; x < N; x++) if (v.water[idx(x, rz)]) { if (w0 < 0) w0 = x; w1 = x; }
+  assert.ok(w0 > 0, 'nehir bulundu');
+  const nSeg = v.segs.length;
+  const r = A.buildRoadGeoms(v, geomsFor('straight', [[w0 - 10, rz + 5], [w1 + 10, rz + 5]]), 1, {});
+  assert.ok(r.ok, 'köprü yolu: ' + r.msg);
+  assert.ok(v.segs.length > nSeg, 'şerit eklendi');
+  refreshRoads(v);
+  const wc = idx(w0 + 1, rz + 5); assert.ok(v.road[wc] && v.rt.bridge[wc] === 1, 'su üstündeki hücre köprü');
+  for (const dz of [-1, 1]) assert.equal(v.rt.zdepth[idx(w0 - 1, rz + 5 + dz)] || 0, 0, 'köprü başının yanı bölgelenemez');
+  assert.ok(v.rt.zdepth[idx(w0 - 8, rz + 4)] > 0, 'köprüden uzakta bölgelenebilir');
+  const curve = A.buildRoadGeoms(v, geomsFor('curved', [[w0 - 30, rz + 5], [w0 - 30, rz + 25], [w0 - 10, rz + 25]]), 1, {});
+  assert.ok(curve.ok, 'kavisli yol');
+  const segAfter = v.segs.length; A.undoLast(v); assert.ok(v.segs.length < segAfter, 'geri al şeridi kaldırır');
+  const v2 = deserialize(serialize(v)); initRuntime(v2); assert.equal(v2.segs.length, v.segs.length, 'şeritler kaydedilir');
+  console.log('köprü + pürüzsüz yol testleri geçti', v.segs.length, 'şerit');
+}
 console.log('TÜM ÖZELLİK TESTLERİ GEÇTİ');

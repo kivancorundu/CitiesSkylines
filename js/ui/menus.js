@@ -7,7 +7,7 @@ import { createState } from '../core/state.js';
 import { options, setOption, resetOptions, KEY_NAMES, keyLabel, GRAPHICS_PRESETS, IS_TOUCH } from '../core/options.js';
 
 const $ = (id) => document.getElementById(id);
-export const VERSION = '0.3.0';
+export const VERSION = '0.4.0';
 
 // ---- seçenek tanımları (sekme → satırlar) ----
 const sel = (key, label, choices, desc) => ({ t: 'select', key, label, choices, desc });
@@ -312,9 +312,9 @@ export class Menus {
     this.show(`<div class="mm-shade"></div><div class="pm wide help">
       <div class="pm-title">Kontroller</div>
       <div class="ng-sub">Bilgisayar</div>
-      <p><span class="kbd">${L(k.panUp)} ${L(k.panLeft)} ${L(k.panDown)} ${L(k.panRight)}</span> kaydır · <span class="kbd">${L(k.rotLeft)} ${L(k.rotRight)}</span> döndür · <span class="kbd">${L(k.tiltUp)} ${L(k.tiltDown)}</span> eğim · Tekerlek: yakınlaştır · Sağ tık sürükle: döndür · Orta tık sürükle: kaydır · Sağ tık: iptal · <span class="kbd">Ctrl+Z</span> yol geri al · <span class="kbd">${L(k.rotBldLeft)} ${L(k.rotBldRight)}</span> binayı döndür · <span class="kbd">${L(k.pause)}</span> duraklat · <span class="kbd">${L(k.speed1)} ${L(k.speed2)} ${L(k.speed3)}</span> hız</p>
+      <p><span class="kbd">${L(k.panUp)} ${L(k.panLeft)} ${L(k.panDown)} ${L(k.panRight)}</span> kaydır · <span class="kbd">${L(k.rotLeft)} ${L(k.rotRight)}</span> döndür · <span class="kbd">${L(k.tiltUp)} ${L(k.tiltDown)}</span> eğim · <span class="kbd">${L(k.camView || 'KeyV')}</span> kamera görünümü (klasik / alçak açı / sokak / kuşbakışı) · Tekerlek: yakınlaştır · Sağ tık sürükle: döndür ve eğ · Orta tık sürükle: kaydır · Sağ tık: iptal · <span class="kbd">Ctrl+Z</span> yol geri al · <span class="kbd">${L(k.rotBldLeft)} ${L(k.rotBldRight)}</span> binayı döndür · <span class="kbd">${L(k.pause)}</span> duraklat · <span class="kbd">${L(k.speed1)} ${L(k.speed2)} ${L(k.speed3)}</span> hız</p>
       <div class="ng-sub">Dokunmatik</div>
-      <p>Tek parmak: kaydır (araç seçiliyken araç kullanılır) · İki parmak: kaydır, sıkıştırarak yakınlaştır, çevirerek döndür · Sağ alttaki düğmeler: döndür ve eğim · Araç seçenekleri panelindeki <b>İptal</b> ve <b>Silgi</b> düğmeleri</p>
+      <p>Tek parmak: kaydır (araç seçiliyken araç kullanılır) · İki parmak: kaydır, sıkıştırarak yakınlaştır, çevirerek döndür, birlikte yukarı/aşağı sürükleyerek eğ (3D perspektif) · Sağ alttaki düğmeler: döndür, eğim ve 🎥 kamera görünümü · Araç seçenekleri panelindeki <b>İptal</b> ve <b>Silgi</b> düğmeleri</p>
       <div class="ng-sub">Yol araçları</div>
       <p><b>Düz</b>: iki nokta · <b>Kavisli</b>: başlangıç, kontrol, bitiş · <b>Sürekli</b>: zincirleme · <b>Izgara</b>: dikdörtgen alana ızgara · <b>Değiştir</b>: mevcut yolu yükselt. Yükseklik ile köprü/üst geçit ya da tünel yapın.</p>
       <button class="pm-item" id="hp-back">Geri</button></div>`, 'pause');

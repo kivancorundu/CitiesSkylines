@@ -10,6 +10,7 @@ import { addXP, serviceUnlocked, zoneUnlocked, isUnlocked, allowedTiles, ownedTi
 import { zoneCellOk } from './growth.js';
 import { refreshRoads } from './simulation.js';
 import { fixCrossings, linkCells, unlinkAll, snapshotCells, restoreCells, neighborhood } from './roadtool.js';
+import { addSeg, pruneSegs, cloneSegs, resample, roundCorners, STEP, snapToSegs, prepareGeom } from './roadgeom.js';
 
 const ownedCell = (s, x, z) => !!s.owned[tileOf(x, z)];
 
@@ -61,7 +62,7 @@ export function buildRoadChains(s, chains, type, opt = {}) {
   if (plan.cost > s.money) return { ok: false, msg: 'Yetersiz para' };
   if (!plan.cells.some((c) => c.ok && !c.same)) return { ok: false, msg: plan.cells.length ? 'Buraya yol yapılamaz' : '' };
   const okSet = new Set(plan.cells.filter((c) => c.ok).map((c) => idx(c.x, c.z)));
-  const undo = { rec: snapshotCells(s, neighborhood(chains)), money: plan.cost };
+  const undo = { rec: snapshotCells(s, neighborhood(chains)), money: plan.cost, segs: cloneSegs(s) };
   let n = 0;
   for (const c of plan.cells) {
     if (!c.ok || c.same) continue;
@@ -80,6 +81,11 @@ export function buildRoadChains(s, chains, type, opt = {}) {
       if (okSet.has(a) && okSet.has(b) && s.road[a] && s.road[b]) linkCells(s, a, b);
     }
   }
+  if (!opt.replace) {
+    if (opt.samplesList) for (const sm of opt.samplesList) addSeg(s, sm);
+    else for (const ch of chains) addSeg(s, resample(roundCorners(simplifyChain(ch).map(([x, z]) => [x + 0.5, z + 0.5])), STEP));
+    pruneSegs(s);
+  }
   s.money -= plan.cost;
   addXP(s, n * 0.15);
   pushUndo(s, undo);
@@ -89,11 +95,42 @@ export function buildRoadChains(s, chains, type, opt = {}) {
 
 export function buildRoad(s, cells, type, opt) { return buildRoadChains(s, [cells], type, opt); }
 
+// Pürüzsüz geometriden yol yap (araç bunu kullanır)
+export function prepareRoadGeoms(s, geoms, snap = true) {
+  const preps = geoms.map((g) => {
+    const gg = g.map((p) => p.slice());
+    if (snap && gg.length >= 2) {
+      const a = snapToSegs(s, gg[0]); if (a) gg[0] = a;
+      const b = snapToSegs(s, gg[gg.length - 1]); if (b) gg[gg.length - 1] = b;
+    }
+    return prepareGeom(gg);
+  });
+  return { chains: preps.map((q) => q.chain).filter((c) => c.length), samplesList: preps.map((q) => q.samples).filter((q) => q.length >= 2) };
+}
+export function planRoadGeoms(s, geoms, type, opt = {}) { const { chains } = prepareRoadGeoms(s, geoms); return planRoadChains(s, chains, type, opt); }
+export function buildRoadGeoms(s, geoms, type, opt = {}) {
+  const { chains, samplesList } = prepareRoadGeoms(s, geoms);
+  return buildRoadChains(s, chains, type, { ...opt, samplesList });
+}
+
+// Zincirdeki doğrusal ara hücreleri at (yalnızca köşeler kalsın)
+function simplifyChain(ch) {
+  if (ch.length < 3) return ch.length === 1 ? [ch[0], ch[0]] : ch;
+  const out = [ch[0]];
+  for (let k = 1; k < ch.length - 1; k++) {
+    const a = out[out.length - 1], b = ch[k], c = ch[k + 1];
+    const d1 = [Math.sign(b[0] - a[0]), Math.sign(b[1] - a[1])], d2 = [Math.sign(c[0] - b[0]), Math.sign(c[1] - b[1])];
+    if (d1[0] !== d2[0] || d1[1] !== d2[1]) out.push(b);
+  }
+  out.push(ch[ch.length - 1]);
+  return out;
+}
+
 function pushUndo(s, u) { const st = s.rt.undo || (s.rt.undo = []); st.push(u); if (st.length > 30) st.shift(); }
 export function canUndo(s) { return !!(s.rt.undo && s.rt.undo.length); }
 export function undoLast(s) {
   const u = s.rt.undo && s.rt.undo.pop(); if (!u) return false;
-  restoreCells(s, u.rec); s.money += u.money;
+  restoreCells(s, u.rec); s.money += u.money; if (u.segs) s.segs = u.segs;
   markRoadsDirty(s); s.rt.dirty.trees = true; s.rt.dirty.zones = true; s.rt.dirty.netMesh = true;
   return true;
 }
@@ -114,6 +151,7 @@ export function removeRoads(s, cells) {
     if (!ownedCell(s, x, z)) continue;
     refund += ROADS[s.road[i]].cost * 0.5; unlinkAll(s, i); s.road[i] = 0; s.rElev[i] = 0; s.roadUp[i] = 0; if (s.rail[i] === 2) s.rail[i] = 0; n++;
   }
+  if (n) pruneSegs(s);
   s.money += refund; markRoadsDirty(s);
   return { ok: n > 0, n, refund };
 }
@@ -244,6 +282,7 @@ export function validateService(s, key, hx, hz, f) {
     if (!ownedCell(s, x, z)) return { ...res, ok: false, msg: 'Bu harita karosu satın alınmamış' };
     if (s.water[i]) return { ...res, ok: false, msg: 'Su üzerine inşa edilemez' };
     if (s.road[i]) return { ...res, ok: false, msg: 'Yol üzerine inşa edilemez' };
+    if (s.rt.bridge) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const j = idx(Math.min(N - 1, Math.max(0, x + dx)), Math.min(N - 1, Math.max(0, z + dz))); if (s.rt.bridge[j]) return { ...res, ok: false, msg: 'Köprünün yanına inşa edilemez' }; }
     if (s.rail[i] === 1 && def.station !== 'train') return { ...res, ok: false, msg: 'Ray üzerine inşa edilemez' };
     const b = s.bld[i] >= 0 ? s.buildings[s.bld[i]] : null;
     if (b && b.kind === 'svc') return { ...res, ok: false, msg: 'Başka bir binayla çakışıyor' };
@@ -255,7 +294,7 @@ export function validateService(s, key, hx, hz, f) {
   }
   for (let z = fp.z; z < fp.z + fp.sz; z++) for (let x = fp.x; x < fp.x + fp.sx; x++) {
     const nx = x + dx, nz = z + dz;
-    if (inB(nx, nz) && s.road[idx(nx, nz)]) road = true;
+    if (inB(nx, nz) && s.road[idx(nx, nz)] && !s.rElev[idx(nx, nz)] && !(s.rt.bridge && s.rt.bridge[idx(nx, nz)])) road = true;
   }
   if (!road && (def.prod?.power)) {
     // enerji santralleri yüksek gerilim hattıyla da bağlanabilir

@@ -37,14 +37,51 @@ export class Renderer {
     this.buildings = new BuildingView(this.scene, this.uniforms);
     this.trees = new TreeView(this.scene, this.uniforms);
     this.vehicles = new VehicleView(this.scene, this.uniforms);
+    this.vehicles.smooth = this.roads.smooth;
     this.effects = new Effects(this.scene, this.camera);
     this.view = null; this.toolFlags = {};
     this.raycaster = new THREE.Raycaster();
     this.lastSeason = -1;
     this.ovTimer = 0;
+    this.buildSky();
     this.skyDay = new THREE.Color(0x9ec9ec); this.skyNight = new THREE.Color(0x0b1424); this.skyDusk = new THREE.Color(0xe8a070);
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  }
+
+  // gökyüzü kubbesi: ufuk → tepe renk geçişi, güneş/ay diski ve hafif bulutlar (3D perspektifte ufuk görünür)
+  buildSky() {
+    this.skyU = {
+      uTop: { value: new THREE.Color(0x3d7fc4) }, uHorizon: { value: new THREE.Color(0xbfd4e6) }, uGround: { value: new THREE.Color(0x8a9a8a) },
+      uSun: { value: new THREE.Vector3(0.4, 0.6, 0.3) }, uSunCol: { value: new THREE.Color(0xfff2d0) }, uCloud: { value: 0.3 }, uNight: { value: 0 }, uTime: { value: 0 },
+    };
+    const mat = new THREE.ShaderMaterial({
+      uniforms: this.skyU, side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+      vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }',
+      fragmentShader: `uniform vec3 uTop, uHorizon, uGround, uSun, uSunCol; uniform float uCloud, uNight, uTime; varying vec3 vDir;
+        float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+        float n2(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(h2(i),h2(i+vec2(1,0)),f.x), mix(h2(i+vec2(0,1)),h2(i+vec2(1,1)),f.x), f.y); }
+        float fbm(vec2 p){ float v=0.0, a=0.5; for(int k=0;k<4;k++){ v+=a*n2(p); p*=2.03; a*=0.5; } return v; }
+        void main(){
+          vec3 d = normalize(vDir); float y = d.y;
+          vec3 col = y > 0.0 ? mix(uHorizon, uTop, pow(clamp(y,0.0,1.0), 0.55)) : mix(uHorizon, uGround, clamp(-y*6.0,0.0,1.0));
+          float sd = max(dot(d, normalize(uSun)), 0.0);
+          col += uSunCol * (pow(sd, 900.0) * 3.0 + pow(sd, 12.0) * 0.25) * (1.0 - uCloud * 0.7);
+          if (y > 0.0) {
+            vec2 uv = d.xz / (y + 0.12) * 1.6 + vec2(uTime * 0.004, uTime * 0.002);
+            float c = smoothstep(0.55 - uCloud * 0.35, 0.95, fbm(uv));
+            vec3 cc = mix(vec3(1.0), vec3(0.55,0.58,0.62), uCloud) * (1.0 - uNight * 0.85);
+            col = mix(col, cc, c * smoothstep(0.0, 0.25, y) * 0.85);
+            // yıldızlar
+            float st = step(0.9975, h2(floor(d.xz / (y + 0.3) * 220.0))) * smoothstep(0.55, 0.9, uNight) * smoothstep(0.05, 0.3, y) * (1.0 - c);
+            col += vec3(st);
+          }
+          gl_FragColor = vec4(col, 1.0);
+        }`,
+    });
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(3000, 32, 16), mat);
+    this.sky.frustumCulled = false; this.sky.renderOrder = -10;
+    this.scene.add(this.sky);
   }
 
   applyGraphics(g) {
@@ -71,7 +108,7 @@ export class Renderer {
   resetForState(s) {
     const d = s.rt.dirty; d.terrain = d.roadMesh = d.buildings = d.trees = d.overlay = true;
     this.vehicles.clear();
-    this.cam.focus(0, 0, 420);
+    this.cam.focus(0, 0, 380); this.cam.tPitch = 0.68; this.cam.viewIdx = 0;
     const hz = N / 2;
     this.cam.tTarget.set((N * 0.38) * CS - HALF, 0, hz * CS - HALF);
   }
@@ -131,6 +168,14 @@ export class Renderer {
     sky.lerp(new THREE.Color(0x8a96a4), cloud * 0.5 * dayF);
     this.scene.background = sky;
     this.scene.fog.color.copy(sky);
+    // gökyüzü kubbesi kamerayı izler
+    this.sky.position.copy(this.camera.position);
+    const U = this.skyU;
+    U.uHorizon.value.copy(sky);
+    U.uTop.value.setHex(0x2f6fb8).lerp(this.skyNight, night).lerp(new THREE.Color(0x6a7684), cloud * 0.6 * dayF);
+    U.uGround.value.copy(sky).multiplyScalar(0.75);
+    U.uSun.value.copy(sd); U.uSunCol.value.setRGB(1, 0.9 - dusk * 0.25, 0.75 - dusk * 0.35).multiplyScalar(dayF > 0.05 ? 1 : 0.25);
+    U.uCloud.value = cloud; U.uNight.value = clamp(night * 1.2, 0, 1); U.uTime.value += dt;
     const fogF = s.weather.fog || 0;
     this.scene.fog.near = lerp(900, 120, fogF) + this.cam.dist * 0.5; this.scene.fog.far = lerp(4200, 900, fogF) + this.cam.dist;
     if (!this.gfx.fog && fogF < 0.05) { this.scene.fog.near = 1e5; this.scene.fog.far = 2e5; }

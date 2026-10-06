@@ -1,7 +1,8 @@
 // Ana simülasyon döngüsü
-import { N, TICKS_PER_MONTH, idx, inB } from '../core/constants.js';
+import { N, TICKS_PER_MONTH, idx, inB, DIR8 } from '../core/constants.js';
 import { SERVICES } from '../data/services.js';
 import { computeConnectivity, accessCell } from './network.js';
+import { pruneSegs, traceUncovered } from './roadgeom.js';
 import { computeZonable, growthTick, growthSlow } from './growth.js';
 import { computeCoverage, computeNearRoad } from './coverage.js';
 import { computeNetworks, allocateUtilities } from './utilities.js';
@@ -23,6 +24,8 @@ export function initRuntime(s) {
   };
   for (let i = 0; i < N * N; i++) if (s.outside[i] === 1 && s.road[i]) { s.rt.outsideRoad = i; break; }
   computeWaterDist(s);
+  if (!s.segs) s.segs = [];
+  pruneSegs(s); traceUncovered(s);
   refreshRoads(s);
   computeNetworks(s); s.rt.dirty.util = false;
   weatherTick(s);
@@ -32,6 +35,7 @@ export function initRuntime(s) {
 }
 
 export function refreshRoads(s) {
+  computeBridges(s);
   computeConnectivity(s);
   computeZonable(s);
   computeNearRoad(s);
@@ -44,6 +48,21 @@ export function refreshRoads(s) {
   }
   recomputeLines(s);
   s.rt.dirty.roads = false; s.rt.dirty.cov = true; s.rt.dirty.util = true; s.rt.dirty.cand = true;
+}
+
+// Köprü hücreleri: suyun üzerindeki yollar ve kıyıdaki rampa hücreleri
+export function computeBridges(s) {
+  const C = N * N; const br = s.rt.bridge || (s.rt.bridge = new Uint8Array(C)); br.fill(0);
+  for (let i = 0; i < C; i++) {
+    if (!s.road[i]) continue;
+    if (s.water[i]) { br[i] = 1; continue; }
+    const x = i % N, z = (i / N) | 0; const m = s.rConn[i];
+    for (let d = 0; d < 8; d++) {
+      if (!(m & (1 << d))) continue;
+      const nx = x + DIR8[d][0], nz = z + DIR8[d][1];
+      if (inB(nx, nz) && s.water[idx(nx, nz)]) { br[i] = 2; break; }
+    }
+  }
 }
 
 function computeCityEffects(s) {

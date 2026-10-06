@@ -25,7 +25,7 @@ export function createState(seed = (Math.random() * 1e9) | 0, cityName, mapKey =
     polG: new Float32Array(C), polA: new Float32Array(C), polN: new Float32Array(C), polW: new Float32Array(C),
     lv: new Float32Array(C).fill(20), traffic: new Float32Array(C), crimeMap: new Float32Array(C),
     cov: {},
-    buildings: {}, nextId: 1,
+    buildings: {}, nextId: 1, segs: [],
     money: 350000, loan: 0,
     taxes: { res: 10, com: 10, ind: 10, off: 10 },
     fees: { electricity: 100, water: 100, garbage: 100, health: 100, education: 100, transit: 100 },

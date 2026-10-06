@@ -14,7 +14,7 @@ export function computeZonable(s) {
   const zf = s.rt.zfront || (s.rt.zfront = new Int8Array(C));
   zd.fill(0); zf.fill(-1);
   for (let i = 0; i < C; i++) {
-    const r = s.road[i]; if (!r || !ROADS[r].zonable || s.rElev[i]) continue;
+    const r = s.road[i]; if (!r || !ROADS[r].zonable || s.rElev[i] || (s.rt.bridge && s.rt.bridge[i])) continue;
     const x = i % N, z = (i / N) | 0;
     for (let d = 0; d < 4; d++) {
       const [dx, dz] = DIRS[d];
@@ -28,6 +28,11 @@ export function computeZonable(s) {
         if (zd[j] === 0 || k < zd[j]) { zd[j] = k; zf[j] = (d + 2) % 4; }
       }
     }
+  }
+  // köprülerin hemen yanındaki hücreler imar edilemez
+  if (s.rt.bridge) for (let i = 0; i < C; i++) {
+    if (!s.rt.bridge[i]) continue; const x = i % N, z = (i / N) | 0;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) { const nx = x + dx, nz = z + dz; if (inB(nx, nz)) zd[idx(nx, nz)] = 0; }
   }
   // artık imar edilemeyen bölgeleri temizle (bina yoksa)
   for (let i = 0; i < C; i++) if (s.zone[i] && !zd[i] && s.bld[i] < 0) s.zone[i] = 0;

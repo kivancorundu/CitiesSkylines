@@ -49,11 +49,11 @@ export function accessCell(s, b) {
     const nx = x + f[0], nz = z + f[1];
     if (!inB(nx, nz)) continue;
     const j = idx(nx, nz);
-    if (s.bld[j] !== b.id && s.road[j] && !s.rElev[j]) cells.push(j);
+    if (s.bld[j] !== b.id && s.road[j] && !s.rElev[j] && !(s.rt.bridge && s.rt.bridge[j])) cells.push(j);
   }
   if (cells.length) return cells[(cells.length / 2) | 0];
   // herhangi bir komşu yol
-  for (const c of perimeter(b)) if (s.road[c] && !s.rElev[c]) return c;
+  for (const c of perimeter(b)) if (s.road[c] && !s.rElev[c] && !(s.rt.bridge && s.rt.bridge[c])) return c;
   return -1;
 }
 

@@ -43,6 +43,7 @@ class Game {
     this.renderer.applyGraphics(o.graphics);
     const cam = this.renderer.cam;
     cam.edgeScroll = o.gameplay.edgeScroll; cam.speed = o.gameplay.camSpeed; cam.keys2 = o.keys; cam.mouseOpts = o.mouse;
+    cam.onView = (v) => { if (!this.inMenu) this.ui.toast(`Kamera: ${v.name}`); };
     document.documentElement.style.setProperty('--ui-scale', o.interface.uiScale);
     document.body.classList.toggle('no-tips', !o.interface.tooltips);
     document.body.classList.toggle('no-hints', !o.interface.hints);

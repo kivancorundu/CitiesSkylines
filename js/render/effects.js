@@ -75,6 +75,12 @@ export class Effects {
     this.radius.visible = false; scene.add(this.radius);
     this.brush = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffe080, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
     this.brush.visible = false; scene.add(this.brush);
+    // yol önizleme şeridi (CS2 tarzı yarı saydam hayalet yol)
+    this.ribbonGeo = new THREE.BufferGeometry();
+    this.ribbon = new THREE.Mesh(this.ribbonGeo, new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
+    this.ribbon.visible = false; this.ribbon.frustumCulled = false; this.ribbon.renderOrder = 6; scene.add(this.ribbon);
+    this.ribbonEdge = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }));
+    this.ribbonEdge.visible = false; this.ribbonEdge.frustumCulled = false; this.ribbonEdge.renderOrder = 7; scene.add(this.ribbonEdge);
     // simgeler
     this.iconGroup = new THREE.Group(); scene.add(this.iconGroup);
     this.iconMats = {};
@@ -199,7 +205,40 @@ export class Effects {
     }
     this.cellGhost.count = n; this.cellGhost.instanceMatrix.needsUpdate = true; if (this.cellGhost.instanceColor) this.cellGhost.instanceColor.needsUpdate = true;
   }
-  hideCells() { this.cellGhost.count = 0; }
+  hideCells() { this.cellGhost.count = 0; this.ribbon.visible = false; this.ribbonEdge.visible = false; }
+
+  // samplesList: hücre koordinatlı örnek dizileri; elev: 0 zemin, 1 yükseltilmiş, 2 tünel
+  showRoadRibbon(s, samplesList, width, ok, elev = 0) {
+    const pos = [], ind = [], edge = [];
+    for (const sm of samplesList) {
+      const n = sm.length; if (n < 2) continue;
+      const X = [], Y = [], Z = [];
+      for (const p of sm) {
+        const x = p[0] * CS - HALF, z = p[1] * CS - HALF;
+        const c = Math.min(N - 1, Math.max(0, Math.floor(p[1]))) * N + Math.min(N - 1, Math.max(0, Math.floor(p[0])));
+        let y = Math.max(heightAt(s, x, z), -0.2);
+        if (s.water[c]) y = 3.2;
+        if (elev === 1) y = Math.max(y, 0) + 7.5;
+        X.push(x); Y.push(y + 0.45 + (elev === 2 ? 0.3 : 0)); Z.push(z);
+      }
+      for (let k = 1; k < n; k++) Y[k] = Math.max(Y[k], Y[k - 1] - CS * 0.25 * 0.22);
+      for (let k = n - 2; k >= 0; k--) Y[k] = Math.max(Y[k], Y[k + 1] - CS * 0.25 * 0.22);
+      const b0 = pos.length / 3;
+      for (let k = 0; k < n; k++) {
+        const a = Math.max(0, k - 1), b = Math.min(n - 1, k + 1);
+        let dx = X[b] - X[a], dz = Z[b] - Z[a]; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+        const nx = -dz * width / 2, nz = dx * width / 2;
+        pos.push(X[k] + nx, Y[k], Z[k] + nz, X[k] - nx, Y[k], Z[k] - nz);
+        if (k) { const i = b0 + k * 2; ind.push(i - 2, i - 1, i, i - 1, i + 1, i); edge.push(...pos.slice((i - 2) * 3, (i - 1) * 3), ...pos.slice(i * 3, i * 3 + 3), ...pos.slice((i - 1) * 3, i * 3), ...pos.slice((i + 1) * 3, (i + 2) * 3)); }
+      }
+    }
+    if (!ind.length) { this.ribbon.visible = false; this.ribbonEdge.visible = false; return; }
+    this.ribbonGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    this.ribbonGeo.setIndex(ind);
+    this.ribbon.material.color.setHex(ok ? (elev === 2 ? 0xc0a0ff : 0x7fd0ff) : 0xff6050);
+    this.ribbonEdge.geometry.setAttribute('position', new THREE.Float32BufferAttribute(edge, 3));
+    this.ribbon.visible = true; this.ribbonEdge.visible = true;
+  }
 
   showBuildingGhost(s, fp, height, ok, f, radiusCells) {
     let y = -1e9; for (let z = fp.z; z <= fp.z + fp.sz; z++) for (let x = fp.x; x <= fp.x + fp.sx; x++) { const h = cellHeight(s, Math.min(N - 1, Math.max(0, x)), Math.min(N - 1, Math.max(0, z))); if (h > y) y = h; }

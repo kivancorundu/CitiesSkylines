@@ -16,7 +16,7 @@ export const DEFAULT_OPTIONS = {
   interface: { uiScale: IS_TOUCH ? 1 : 1, tooltips: true, clock24: true, icons: true, chirperToasts: true, hints: true },
   audio: { master: 0.8, ui: 0.7, ambient: 0.4, mute: false },
   keys: {
-    panUp: 'KeyW', panDown: 'KeyS', panLeft: 'KeyA', panRight: 'KeyD', rotLeft: 'KeyQ', rotRight: 'KeyE', tiltUp: 'KeyR', tiltDown: 'KeyF', zoomIn: 'Equal', zoomOut: 'Minus',
+    panUp: 'KeyW', panDown: 'KeyS', panLeft: 'KeyA', panRight: 'KeyD', rotLeft: 'KeyQ', rotRight: 'KeyE', tiltUp: 'KeyR', tiltDown: 'KeyF', zoomIn: 'Equal', zoomOut: 'Minus', camView: 'KeyV',
     pause: 'Space', speed1: 'Digit1', speed2: 'Digit2', speed3: 'Digit3', bulldoze: 'KeyB', infoviews: 'KeyI', progression: 'KeyP', economy: 'KeyM', stats: 'KeyN',
     rotBldLeft: 'Comma', rotBldRight: 'Period', brushDown: 'BracketLeft', brushUp: 'BracketRight', quicksave: 'F5', quickload: 'F9',
   },
@@ -25,7 +25,7 @@ export const DEFAULT_OPTIONS = {
 };
 
 export const KEY_NAMES = {
-  panUp: 'Kamera ileri', panDown: 'Kamera geri', panLeft: 'Kamera sola', panRight: 'Kamera sağa', rotLeft: 'Sola döndür', rotRight: 'Sağa döndür', tiltUp: 'Eğimi artır', tiltDown: 'Eğimi azalt', zoomIn: 'Yakınlaştır', zoomOut: 'Uzaklaştır',
+  panUp: 'Kamera ileri', panDown: 'Kamera geri', panLeft: 'Kamera sola', panRight: 'Kamera sağa', rotLeft: 'Sola döndür', rotRight: 'Sağa döndür', tiltUp: 'Eğimi artır', tiltDown: 'Eğimi azalt', zoomIn: 'Yakınlaştır', zoomOut: 'Uzaklaştır', camView: 'Kamera görünümü (kuşbakışı / sokak)',
   pause: 'Duraklat / Devam', speed1: 'Hız 1', speed2: 'Hız 2', speed3: 'Hız 3', bulldoze: 'Yıkım aracı', infoviews: 'Bilgi görünümleri', progression: 'İlerleme', economy: 'Ekonomi', stats: 'İstatistikler',
   rotBldLeft: 'Binayı sola döndür', rotBldRight: 'Binayı sağa döndür', brushDown: 'Fırçayı küçült', brushUp: 'Fırçayı büyüt', quicksave: 'Hızlı kaydet', quickload: 'Hızlı yükle',
 };

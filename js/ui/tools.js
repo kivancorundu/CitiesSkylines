@@ -9,6 +9,8 @@ import { tileCost, allowedTiles, ownedTiles } from '../sim/progression.js';
 import { newLine, computeLinePath, LINE_TYPES } from '../sim/transit.js';
 import { zoneCellOk } from '../sim/growth.js';
 import { chainsFor, snapAngle, snapLength } from '../sim/roadtool.js';
+import { geomsFor } from '../sim/roadgeom.js';
+import { WIDTH as ROAD_W } from '../render/smoothroads.js';
 import { options } from '../core/options.js';
 import { refreshRoads } from '../sim/simulation.js';
 
@@ -213,9 +215,26 @@ export class Tools {
     return [Math.max(0, Math.min(N - 1, p[0])), Math.max(0, Math.min(N - 1, p[1]))];
   }
 
-  chains(withHover = true) {
+  rawPts(withHover) {
     const pts = this.pts.slice();
     if (withHover && this.hover) pts.push(this.snapPoint(this.hover, !pts.length));
+    return pts;
+  }
+
+  // pürüzsüz yol aracı mı (değiştirme modu hariç)
+  smoothRoad() { return this.tool.type === 'road' && this.lineMode() !== 'replace'; }
+
+  geoms(withHover = true) {
+    const pts = this.rawPts(withHover); if (!pts.length) return [];
+    const mode = this.lineMode(); const ro = this.o.road;
+    let m = mode; if (mode === 'curved' && pts.length < 3) m = 'straight';
+    if (m === 'continuous') m = 'straight';
+    return geomsFor(m, pts, { gridSpacing: ro.gridSp, parallel: ro.parallel, parallelSpacing: ro.parSp });
+  }
+
+  chains(withHover = true) {
+    if (this.smoothRoad()) return A.prepareRoadGeoms(this.s, this.geoms(withHover)).chains;
+    const pts = this.rawPts(withHover);
     if (!pts.length) return [];
     const mode = this.lineMode(); const ro = this.o.road;
     const four = this.tool.type !== 'road';
@@ -230,10 +249,17 @@ export class Tools {
     this.pts.push(p);
     const need = this.lineMode() === 'curved' ? 3 : 2;
     if (this.pts.length >= need) {
-      const chains = this.chains(false);
-      this.commitChains(chains);
+      if (this.smoothRoad()) this.commitGeoms(this.geoms(false));
+      else this.commitChains(this.chains(false));
       this.pts = this.lineMode() === 'continuous' ? [p] : [];
     }
+  }
+
+  commitGeoms(geoms) {
+    const t = this.tool;
+    const r = A.buildRoadGeoms(this.s, geoms, t.road, { elev: this.o.road.elev });
+    if (r && !r.ok && r.msg) this.g.ui.toast(r.msg, 'bad'); else if (r && r.ok) this.g.sound('build');
+    this.g.ui.renderToolPanels();
   }
 
   commitChains(chains) {
@@ -353,8 +379,9 @@ export class Tools {
         break;
       }
       case 'road': case 'net': case 'upgrade': {
-        const chains = this.chains(true);
-        let plan;
+        let chains, plan, samples = null;
+        if (this.smoothRoad()) { const pr = A.prepareRoadGeoms(s, this.geoms(true)); chains = pr.chains; samples = pr.samplesList; }
+        else chains = this.chains(true);
         if (t.type === 'road') plan = A.planRoadChains(s, chains, t.road, { elev: this.o.road.elev, replace: this.o.road.mode === 'replace' });
         else {
           const flat = []; for (const c of chains) for (const p of c) flat.push(p);
@@ -363,8 +390,19 @@ export class Tools {
         }
         const rem = this.erasing() && t.type !== 'road';
         const hgt = t.type === 'net' && t.kind === 'power' ? 2 : t.type === 'road' && this.o.road.elev === 1 ? 7.5 : 0.6;
-        fx.showCells(s, plan.cells.filter((c) => !c.skip).map((c) => [c.x, c.z, rem ? 0xe04040 : !c.ok ? 0xe04040 : c.same || c.have ? 0x60a0ff : 0x40e070]), null, hgt);
-        let len = 0; for (const c of chains) len += Math.max(0, c.length - 1);
+        let len = 0;
+        if (samples) {
+          // pürüzsüz yol: hayalet şerit + yalnızca sorunlu hücreler
+          const bad = plan.cells.filter((c) => !c.ok && !c.skip);
+          fx.showCells(s, bad.map((c) => [c.x, c.z, 0xe04040]), null, 0.4);
+          const ok = !bad.length && plan.cost <= s.money;
+          fx.showRoadRibbon(s, samples, (ROAD_W[ROADS[t.road].key] || 7) + 1.2, ok, this.o.road.elev);
+          for (const sm of samples) for (let k = 1; k < sm.length; k++) len += Math.hypot(sm[k][0] - sm[k - 1][0], sm[k][1] - sm[k - 1][1]);
+          len = Math.round(len);
+        } else {
+          fx.showCells(s, plan.cells.filter((c) => !c.skip).map((c) => [c.x, c.z, rem ? 0xe04040 : !c.ok ? 0xe04040 : c.same || c.have ? 0x60a0ff : 0x40e070]), null, hgt);
+          for (const c of chains) len += Math.max(0, c.length - 1);
+        }
         this.preview = { cost: plan.cost, cells: plan.cells.length, len: len * CS };
         this.cursorText = rem ? 'Kaldır' : `${fmtMoney(plan.cost)}${plan.cost > s.money ? ' (yetersiz para)' : ''} · ${len * CS} m`;
         break;

@@ -15,7 +15,7 @@ npm install && npm run desktop   # masaüstü (Electron) sürümü
 ### Platformlar
 - **PC (Windows/macOS/Linux):** `desktop/` klasöründeki Electron sarmalayıcısı oyunu yerel bir uygulama olarak açar (`npm run desktop`). `npm run dist:win|dist:mac|dist:linux` komutları için `electron-builder` kurulmalıdır (`npm i -D electron-builder`).
 - **Steam:** Yayın için Steamworks hesabı (Steam Direct ücreti), uygulama kimliği ve Steamworks SDK entegrasyonu (başarımlar, bulut kayıt) gerekir; Electron derlemesi Steam'e "depot" olarak yüklenir. Bu entegrasyon henüz yapılmadı.
-- **Mobil:** Oyun dokunmatik kontrollerle mobil tarayıcıda çalışır (tek parmak kaydır/araç, iki parmak yakınlaştır/döndür, ekran düğmeleri). Uygulama mağazaları için Capacitor veya benzeri bir sarmalayıcıyla paketlenebilir.
+- **Mobil:** Oyun dokunmatik kontrollerle mobil tarayıcıda çalışır (tek parmak kaydır/araç, iki parmak yakınlaştır/döndür, iki parmakla yukarı/aşağı sürükleyerek 3D eğim, 🎥 kamera görünümü ve diğer ekran düğmeleri). Uygulama mağazaları için Capacitor veya benzeri bir sarmalayıcıyla paketlenebilir.
 
 Herhangi bir statik sunucu da olur (ör. `python3 -m http.server`). ES modülleri kullanıldığı için `index.html` dosyasını doğrudan çift tıklayarak (file://) açmak çalışmaz.
 
@@ -32,9 +32,10 @@ node tests/bot.mjs 60   # şehri 60 ay boyunca bir "bot belediye başkanı" ile 
 |---|---|
 | `W A S D` / oklar | Kamerayı kaydır (`Shift` ile hızlı) |
 | `Q` / `E` | Kamerayı döndür |
-| `R` / `F` | Kamera eğimi |
+| `R` / `F` | Kamera eğimi (kuşbakışından yer seviyesine kadar serbest) |
+| `V` | Kamera görünümü: klasik → alçak açı → sokak görünümü → kuşbakışı |
 | Fare tekerleği, `+`/`-` | Yakınlaştır / uzaklaştır |
-| Sağ tık sürükle | Kamerayı döndür |
+| Sağ tık sürükle | Kamerayı döndür ve eğ |
 | Orta tık sürükle | Kamerayı kaydır |
 | Sol tık | Aracı kullan / binayı seç |
 | Sağ tık (sürüklemeden) | İptal / araçtan çık |
@@ -73,7 +74,10 @@ CS2'nin özellikleri tek tek ele alınıp (kilometre taşı listesi, bölge tür
 
 ### Yollar ve ulaşım
 - Küçük yol, toprak yol, orta yol, büyük bulvar (refüjlü), toplu taşıma şeritli yol, otoyol, yaya yolu
-- Su üzerinde otomatik **köprüler**, eğimli arazide yokuşlar, kavşaklarda yaya geçitleri, sokak lambaları
+- **Pürüzsüz yol geometrisi** (CS2 gibi): yollar 2 m aralıklı eğri şeritler olarak saklanır ve çizilir; kavisler, köşe yuvarlama, kusursuz T kavşaklar (uçlar mevcut yola yapışır), kavşak dolguları, yaya geçitleri, çıkmaz sokak uçları
+- Yol çizerken yarı saydam **hayalet yol önizlemesi**; araçlar eğrileri Catmull-Rom ile izler
+- Su üzerinden çekilen yollar otomatik **köprü** olur: tabliye, korkuluklar (dikmeli), ayaklar ve yumuşak rampalar; köprü ve köprü başlarının yanına bölge/bina konamaz
+- Otoyollarda bariyerler, eğimli arazide yokuşlar, sokak lambaları
 - **Yol yükseltmeleri**: ağaçlar, çim şerit, hız tümseği
 - Düz, kavisli, sürekli, ızgara ve değiştir modları; yükseltilmiş yollar ve tüneller
 - Yolların altından geçen alçak gerilim (CS2'deki gibi yollar elektrik taşır)

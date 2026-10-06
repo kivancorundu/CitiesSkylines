@@ -5,6 +5,7 @@ import { ROADS } from '../data/roads.js';
 import { LINE_TYPES } from '../sim/transit.js';
 import { Pool, mergeGeos, plainMaterial } from './geom.js';
 
+const _A = [0, 0, 0], _B = [0, 0, 0], _C2 = [0, 0, 0], _D = [0, 0, 0];
 const _m = new THREE.Matrix4(), _c = new THREE.Color(), _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1), _up = new THREE.Vector3(0, 1, 0);
 const CAR_COLORS = [0xd0d0d0, 0x202020, 0xf0f0f0, 0xa02020, 0x2040a0, 0x606870, 0x8a8a8a, 0x2a6a3a, 0xc0a040, 0x5a3a8a];
 const KIND_COLORS = { truck: 0xe8e4dc, garbage: 0x5a8a3a, ambulance: 0xf4f4f4, fire: 0xd02a1a, police: 0x2a4aa0, hearse: 0x1a1a1a, post: 0xe0b020 };
@@ -89,17 +90,29 @@ export class VehicleView {
     this.peds = keep;
   }
 
+  // hücre konumu: pürüzsüz yol çizicisinin hesapladığı eğri üzerindeki nokta (yoksa hücre merkezi)
+  cellPt(s, c, o) {
+    const sm = this.smooth;
+    if (sm && sm.cellHas[c] && s.road[c]) { o[0] = sm.cellPos[c * 3]; o[1] = sm.cellPos[c * 3 + 1] + 0.05; o[2] = sm.cellPos[c * 3 + 2]; }
+    else { o[0] = (c % N + 0.5) * CS - HALF; o[1] = cellY(s, c); o[2] = (((c / N) | 0) + 0.5) * CS - HALF; }
+    return o;
+  }
+
   posAt(s, path, u, out, laneOff = 1.7) {
     if (s.leftHand) laneOff = -laneOff;
     const n = path.length - 1;
     const i = clamp(Math.floor(u), 0, n - 1), t = clamp(u - i, 0, 1);
-    const a = path[i], b = path[i + 1];
-    const ax = (a % N + 0.5) * CS - HALF, az = (((a / N) | 0) + 0.5) * CS - HALF;
-    const bx = (b % N + 0.5) * CS - HALF, bz = (((b / N) | 0) + 0.5) * CS - HALF;
-    let dx = bx - ax, dz = bz - az; const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
-    out.x = ax + (bx - ax) * t - dz * laneOff;
-    out.z = az + (bz - az) * t + dx * laneOff;
-    out.y = cellY(s, a) * (1 - t) + cellY(s, b) * t;
+    // Catmull-Rom: araçlar köşelerde kırılmadan kavis çizer
+    const p0 = this.cellPt(s, path[Math.max(0, i - 1)], _A), p1 = this.cellPt(s, path[i], _B), p2 = this.cellPt(s, path[i + 1], _C2), p3 = this.cellPt(s, path[Math.min(n, i + 2)], _D);
+    const t2 = t * t, t3 = t2 * t;
+    const cr = (k) => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3);
+    const dr = (k) => 0.5 * ((-p0[k] + p2[k]) + 2 * (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t + 3 * (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t2);
+    let dx = dr(0), dz = dr(2); let L = Math.hypot(dx, dz);
+    if (L < 1e-4) { dx = p2[0] - p1[0]; dz = p2[2] - p1[2]; L = Math.hypot(dx, dz) || 1; }
+    dx /= L; dz /= L;
+    out.x = cr(0) - dz * laneOff;
+    out.z = cr(2) + dx * laneOff;
+    out.y = p1[1] * (1 - t) + p2[1] * t;
     out.ang = Math.atan2(dx, dz);
     return out;
   }

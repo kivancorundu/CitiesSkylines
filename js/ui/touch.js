@@ -1,6 +1,8 @@
-// Dokunmatik kontroller: tek parmak kaydır/araç, iki parmak kaydır + sıkıştır (yakınlaştır) + çevir (döndür)
+// Dokunmatik kontroller: tek parmak kaydır/araç, iki parmak kaydır + sıkıştır (yakınlaştır) + çevir (döndür),
+// iki parmak birlikte yukarı/aşağı sürükle = kamera eğimi (3D perspektif)
 import { options } from '../core/options.js';
 import { clamp } from '../core/constants.js';
+import { DIST_MIN, DIST_MAX } from '../render/camera.js';
 
 const DRAG_TOOLS = new Set(['road', 'net', 'upgrade', 'bulldoze', 'terrain', 'trees', 'district']);
 
@@ -37,7 +39,7 @@ export class TouchControls {
     } else if (this.pts.size === 2) {
       // tek parmakla başlayan araç işlemini iptal et, iki parmak hareketine geç
       if (this.mode === 'tool') { this.T.mouseDown = false; this.T.cancel(); }
-      this.mode = 'gesture'; this.gest = this.gesture();
+      this.mode = 'gesture'; this.gest = this.gesture(); this.gestKind = null; this.gestAcc = { dx: 0, dy: 0, dd: 0, same: 0 };
     }
   }
 
@@ -58,9 +60,19 @@ export class TouchControls {
       if (Math.hypot(p.x - p.sx, p.y - p.sy) > 8) { this.cam.panScreen(-dx * 1.2 * o.panSens, -dy * 1.2 * o.panSens); this.moved = true; }
     } else if (this.mode === 'gesture' && this.pts.size >= 2) {
       const g = this.gesture(), p = this.gest;
-      this.cam.panScreen(-(g.cx - p.cx) * 1.2 * o.panSens, -(g.cy - p.cy) * 1.2 * o.panSens);
-      if (p.d > 10 && g.d > 10) this.cam.tDist = clamp(this.cam.tDist * Math.pow(p.d / g.d, o.pinchSens), 25, 1900);
-      if (o.twist) { let da = g.ang - p.ang; if (da > Math.PI) da -= Math.PI * 2; if (da < -Math.PI) da += Math.PI * 2; this.cam.tYaw -= da; }
+      const [a, b] = [...this.pts.values()];
+      const ady = a.y - (a.py ?? a.y), bdy = b.y - (b.py ?? b.y);
+      // hareket türünü ilk ~16 px'te belirle: iki parmak aynı yönde dikey → eğim, aksi halde kaydır/yakınlaştır/çevir
+      if (!this.gestKind) {
+        const A = this.gestAcc; A.dx += Math.abs(g.cx - p.cx); A.dy += g.cy - p.cy; A.dd += Math.abs(g.d - p.d); if (ady * bdy > 0) A.same++;
+        if (Math.abs(A.dy) + A.dx + A.dd > 16) this.gestKind = Math.abs(A.dy) > A.dx * 1.6 && A.dd < Math.abs(A.dy) * 0.5 && A.same >= 1 ? 'tilt' : 'nav';
+      }
+      if (this.gestKind === 'tilt') this.cam.tilt((g.cy - p.cy) * 0.006 * o.panSens);
+      else {
+        this.cam.panScreen(-(g.cx - p.cx) * 1.2 * o.panSens, -(g.cy - p.cy) * 1.2 * o.panSens);
+        if (p.d > 10 && g.d > 10) this.cam.tDist = clamp(this.cam.tDist * Math.pow(p.d / g.d, o.pinchSens), DIST_MIN, DIST_MAX);
+        if (o.twist) { let da = g.ang - p.ang; if (da > Math.PI) da -= Math.PI * 2; if (da < -Math.PI) da += Math.PI * 2; this.cam.tYaw -= da; }
+      }
       this.gest = g;
     }
   }
@@ -102,5 +114,6 @@ export class TouchControls {
       b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off);
     });
     const back = document.getElementById('cam-back'); if (back) back.addEventListener('click', () => this.T.back());
+    const view = document.getElementById('cam-view'); if (view) view.addEventListener('click', (e) => { e.preventDefault(); this.cam.cycleView(); });
   }
 }
