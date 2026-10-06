@@ -167,9 +167,9 @@ export const PANELS = {
     bind(ui, el) {
       const s = ui.s;
       el.querySelectorAll('[data-dp]').forEach((c) => c.addEventListener('change', () => { const [id, k] = c.dataset.dp.split(':'); const d = s.districts.find((q) => q.id === +id); d.policies[k] = c.checked; if (c.checked) s.policies[k] = true; else if (!s.districts.some((q) => q.policies[k])) s.policies[k] = false; }));
-      el.querySelectorAll('[data-ren]').forEach((b) => b.addEventListener('click', () => { const d = s.districts.find((q) => q.id === +b.dataset.ren); const n = prompt('İlçe adı', d.name); if (n) { d.name = n; ui.refreshPanel(); } }));
+      el.querySelectorAll('[data-ren]').forEach((b) => b.addEventListener('click', () => { const d = s.districts.find((q) => q.id === +b.dataset.ren); ui.ask('İlçe adı', d.name, (n) => { d.name = n; ui.refreshPanel(); }); }));
       el.querySelectorAll('[data-paint]').forEach((b) => b.addEventListener('click', () => { ui.selectCategory('areas'); ui.g.tools.set({ type: 'district', id: +b.dataset.paint }); }));
-      el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { if (confirm('İlçe silinsin mi?')) { deleteDistrict(s, +b.dataset.del); ui.refreshPanel(); } }));
+      el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { ui.confirmBox('İlçe silinsin mi? Politikaları da kaldırılır.', () => { deleteDistrict(s, +b.dataset.del); ui.refreshPanel(); }); }));
     },
   },
   transit: {
@@ -192,7 +192,7 @@ export const PANELS = {
       const s = ui.s;
       el.querySelectorAll('[data-veh]').forEach((b) => b.addEventListener('click', () => { const [id, d] = b.dataset.veh.split(':'); const l = s.lines.find((q) => q.id === +id); l.vehicles = clamp(l.vehicles + +d, 1, 30); ui.refreshPanel(); }));
       el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { s.lines = s.lines.filter((q) => q.id !== +b.dataset.del); ui.refreshPanel(); }));
-      el.querySelectorAll('[data-ren]').forEach((b) => b.addEventListener('click', () => { const l = s.lines.find((q) => q.id === +b.dataset.ren); const n = prompt('Hat adı', l.name); if (n) { l.name = n; ui.refreshPanel(); } }));
+      el.querySelectorAll('[data-ren]').forEach((b) => b.addEventListener('click', () => { const l = s.lines.find((q) => q.id === +b.dataset.ren); ui.ask('Hat adı', l.name, (n) => { l.name = n; ui.refreshPanel(); }); }));
       el.querySelectorAll('[data-col]').forEach((c) => c.addEventListener('change', () => { const l = s.lines.find((q) => q.id === +c.dataset.col); l.color = c.value; }));
       el.querySelectorAll('[data-ext]').forEach((b) => b.addEventListener('click', () => { const l = s.lines.find((q) => q.id === +b.dataset.ext); ui.g.tools.set({ type: 'line', lineType: l.type, lineId: l.id }); }));
     },

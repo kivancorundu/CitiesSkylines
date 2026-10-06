@@ -26,7 +26,7 @@ export class UI {
     $('btn-menu').addEventListener('click', () => this.menu());
     $('milestone').addEventListener('click', () => this.togglePanel('prog'));
     $('devpts').addEventListener('click', () => { this.togglePanel('prog'); });
-    $('city-name').addEventListener('click', () => { const n = prompt('Şehir adı:', this.g.state.cityName); if (n) { this.g.state.cityName = n.slice(0, 40); } });
+    $('city-name').addEventListener('click', () => this.ask('Şehir adı', this.g.state.cityName, (n) => { this.g.state.cityName = n.slice(0, 40); }));
     window.addEventListener('keydown', (e) => this.onKey(e));
     document.addEventListener('mouseover', (e) => { const el = e.target.closest('[data-tip]'); if (el) this.tip(el.dataset.tip, e); else this.tip(null); });
     document.addEventListener('mousemove', (e) => { if (!$('tooltip').classList.contains('hidden')) this.placeTip(e); });
@@ -156,7 +156,7 @@ export class UI {
     else if (k === 'trees') T.set({ type: 'trees', remove: v === '1' });
     else if (k === 'tiles') T.set({ type: 'tiles' });
     else if (k === 'district') T.set({ type: 'district', id: +v });
-    else if (k === 'newdistrict') { const n = prompt('İlçe adı:', `İlçe ${this.s.districts.length + 1}`); if (n !== null) { const d = createDistrict(this.s, n); if (d) { this.renderFlyout(); T.set({ type: 'district', id: d.id }); } } return; }
+    else if (k === 'newdistrict') { this.ask('Yeni ilçenin adı', `İlçe ${this.s.districts.length + 1}`, (n) => { const d = createDistrict(this.s, n); if (d) { this.renderFlyout(); T.set({ type: 'district', id: d.id }); } }); return; }
     else if (k === 'pipeall') { this.g.pipeAllRoads(); return; }
     $('flyout').querySelectorAll('.card').forEach((c) => c.classList.toggle('on', c === el));
   }
@@ -300,6 +300,25 @@ export class UI {
   tip(html, e) { const t = $('tooltip'); if (!html) { t.classList.add('hidden'); return; } t.innerHTML = html; t.classList.remove('hidden'); this.placeTip(e); }
   placeTip(e) { const t = $('tooltip'); const w = t.offsetWidth, h = t.offsetHeight; let x = e.clientX + 14, y = e.clientY - h - 10; if (x + w > innerWidth) x = innerWidth - w - 6; if (y < 4) y = e.clientY + 20; t.style.left = x + 'px'; t.style.top = y + 'px'; }
 
+  // Tarayıcı prompt/confirm yerine oyun içi küçük diyaloglar
+  ask(title, value, cb) {
+    const d = $('dialog');
+    d.innerHTML = `<div class="dbox"><div class="sec">${title}</div><input type="text" id="dlg-in" maxlength="40"><div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn" id="dlg-no">Vazgeç</button><button class="btn good" id="dlg-ok">Tamam</button></div></div>`;
+    d.classList.remove('hidden');
+    const inp = $('dlg-in'); inp.value = value || ''; inp.focus(); inp.select();
+    const close = () => d.classList.add('hidden');
+    const ok = () => { const v = inp.value.trim(); close(); if (v) cb(v); };
+    $('dlg-ok').onclick = ok; $('dlg-no').onclick = close;
+    inp.onkeydown = (e) => { if (e.key === 'Enter') ok(); if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  }
+  confirmBox(text, cb) {
+    const d = $('dialog');
+    d.innerHTML = `<div class="dbox"><div style="margin-bottom:12px">${text}</div><div class="row" style="justify-content:flex-end"><button class="btn" id="dlg-no">Vazgeç</button><button class="btn danger" id="dlg-ok">Evet</button></div></div>`;
+    d.classList.remove('hidden');
+    const close = () => d.classList.add('hidden');
+    $('dlg-ok').onclick = () => { close(); cb(); }; $('dlg-no').onclick = close;
+  }
+
   modal(html) { const m = $('modal'); m.innerHTML = `<div class="mbox">${html}</div>`; m.classList.remove('hidden'); this.g.modalPause(true); return m; }
   closeModal() { $('modal').classList.add('hidden'); this.g.modalPause(false); }
 
@@ -335,7 +354,7 @@ export class UI {
       const slots = g.listSaves();
       const m = this.modal(`<h1>📂 Yükle</h1>${slots.map((sl) => `<div class="row"><span>${sl.name}<br><small class="l">${sl.date} · ${fmtNum(sl.pop)} nüfus</small></span><span><button class="btn good" data-ld="${sl.key}">Yükle</button> <button class="btn danger" data-del="${sl.key}">Sil</button></span></div>`).join('') || '<div class="l">Kayıt yok</div>'}<div class="menu"><button class="btn" id="ld-back">Geri</button></div>`);
       m.querySelectorAll('[data-ld]').forEach((b) => b.addEventListener('click', () => { if (g.load(b.dataset.ld)) this.closeModal(); }));
-      m.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { if (confirm('Kayıt silinsin mi?')) { g.deleteSave(b.dataset.del); this.menuAct('load'); } }));
+      m.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { this.confirmBox('Bu kayıt kalıcı olarak silinsin mi?', () => { g.deleteSave(b.dataset.del); this.menuAct('load'); }); }));
       m.querySelector('#ld-back').addEventListener('click', () => this.menu());
     } else if (a === 'export') g.exportFile();
     else if (a === 'import') g.importFile();

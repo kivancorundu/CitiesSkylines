@@ -44,7 +44,7 @@ class Game {
 
   setSpeed(v) { this.speed = v; if (v > 0) this.prevSpeed = v; }
   togglePause() { if (this.speed === 0) this.setSpeed(this.prevSpeed || 1); else this.setSpeed(0); }
-  modalPause(on) { if (on) { this.modalPrev = this.speed; this.speed = 0; } else if (this.modalPrev !== undefined) { this.speed = this.modalPrev; this.modalPrev = undefined; } }
+  modalPause(on) { if (on) { if (this.modalPrev === undefined) this.modalPrev = this.speed; this.speed = 0; } else if (this.modalPrev !== undefined) { this.speed = this.modalPrev; this.modalPrev = undefined; } }
 
   loop() {
     const now = performance.now();
