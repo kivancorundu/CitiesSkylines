@@ -14,7 +14,7 @@ export function computeZonable(s) {
   const zf = s.rt.zfront || (s.rt.zfront = new Int8Array(C));
   zd.fill(0); zf.fill(-1);
   for (let i = 0; i < C; i++) {
-    const r = s.road[i]; if (!r || !ROADS[r].zonable) continue;
+    const r = s.road[i]; if (!r || !ROADS[r].zonable || s.rElev[i]) continue;
     const x = i % N, z = (i / N) | 0;
     for (let d = 0; d < 4; d++) {
       const [dx, dz] = DIRS[d];

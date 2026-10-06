@@ -6,7 +6,34 @@
   "type": "module",
   "scripts": {
     "start": "node server.cjs",
-    "test": "node tests/features.test.mjs && node tests/sim.test.mjs 6 && node tests/bot.mjs 24"
+    "test": "node tests/features.test.mjs && node tests/sim.test.mjs 6 && node tests/bot.mjs 24",
+    "desktop": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:mac": "electron-builder --mac"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "main": "desktop/main.cjs",
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "build": {
+    "appId": "com.sehirkurucu.game",
+    "productName": "Şehir Kurucu II",
+    "files": [
+      "index.html",
+      "css/**",
+      "js/**",
+      "desktop/**"
+    ],
+    "win": {
+      "target": "dir"
+    },
+    "linux": {
+      "target": "dir"
+    },
+    "mac": {
+      "target": "dir"
+    }
+  }
 }

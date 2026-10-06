@@ -43,3 +43,19 @@ export function fmtMoney(v) {
 export function fmtNum(v) { return Math.round(v).toLocaleString('tr-TR'); }
 
 export const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+
+// 8 yönlü yol bağlantıları: D, GD, G, GB, B, KB, K, KD (bit sırası)
+export const DIR8 = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+export const dir8Of = (dx, dz) => DIR8.findIndex(([a, b]) => a === dx && b === dz);
+export const SQRT2 = Math.SQRT2;
+// Bir yol hücresinin bağlı komşularını gezer: fn(j, d, diag)
+export function eachRoadNbr(s, i, fn) {
+  const m = s.rConn[i]; if (!m) return;
+  const x = i % N, z = (i / N) | 0;
+  for (let d = 0; d < 8; d++) {
+    if (!(m & (1 << d))) continue;
+    const nx = x + DIR8[d][0], nz = z + DIR8[d][1];
+    if (nx < 0 || nz < 0 || nx >= N || nz >= N) continue;
+    fn(nz * N + nx, d, d & 1);
+  }
+}

@@ -1,5 +1,5 @@
 // Yol ağı: bağlantı, yol bulma (A*), bina erişim hücreleri
-import { N, DIRS, idx, inB } from '../core/constants.js';
+import { N, DIRS, idx, inB, eachRoadNbr, SQRT2 } from '../core/constants.js';
 import { ROADS } from '../data/roads.js';
 
 export class MinHeap {
@@ -34,11 +34,8 @@ export function computeConnectivity(s) {
   const q = [];
   for (let i = 0; i < C; i++) if (s.outside[i] === 1 && s.road[i]) { conn[i] = 1; q.push(i); }
   while (q.length) {
-    const i = q.pop(); const x = i % N, z = (i / N) | 0;
-    for (const [dx, dz] of DIRS) {
-      const nx = x + dx, nz = z + dz; if (!inB(nx, nz)) continue;
-      const j = idx(nx, nz); if (!conn[j] && s.road[j]) { conn[j] = 1; q.push(j); }
-    }
+    const i = q.pop();
+    eachRoadNbr(s, i, (j) => { if (!conn[j] && s.road[j]) { conn[j] = 1; q.push(j); } });
   }
   return conn;
 }
@@ -52,11 +49,11 @@ export function accessCell(s, b) {
     const nx = x + f[0], nz = z + f[1];
     if (!inB(nx, nz)) continue;
     const j = idx(nx, nz);
-    if (s.bld[j] !== b.id && s.road[j]) cells.push(j);
+    if (s.bld[j] !== b.id && s.road[j] && !s.rElev[j]) cells.push(j);
   }
   if (cells.length) return cells[(cells.length / 2) | 0];
   // herhangi bir komşu yol
-  for (const c of perimeter(b)) if (s.road[c]) return c;
+  for (const c of perimeter(b)) if (s.road[c] && !s.rElev[c]) return c;
   return -1;
 }
 
@@ -77,6 +74,7 @@ export function footprint(b) {
 export function findPath(s, start, goal, mode = 'car', maxIter = 12000) {
   if (start === goal) return [start];
   const passable = passFn(s, mode);
+  const railMode = mode === 'train' || mode === 'metro';
   if (!passable(start) || !passable(goal)) return null;
   const gx = goal % N, gz = (goal / N) | 0;
   const g = s.rt.pfG || (s.rt.pfG = new Float32Array(N * N));
@@ -94,17 +92,20 @@ export function findPath(s, start, goal, mode = 'car', maxIter = 12000) {
       const path = []; let c = i; while (c !== -1) { path.push(c); c = came[c]; } return path.reverse();
     }
     const x = i % N, z = (i / N) | 0;
-    for (let d = 0; d < 4; d++) {
-      const nx = x + DIRS[d][0], nz = z + DIRS[d][1]; if (!inB(nx, nz)) continue;
-      const j = nx + nz * N; if (!passable(j)) continue;
-      const cost = cellCost(s, j, mode, traffic);
+    const relax = (j, diag) => {
+      if (!passable(j)) return;
+      const cost = cellCost(s, j, mode, traffic) * (diag ? SQRT2 : 1);
       const ng = g[i] + cost;
       if (stamp[j] !== st || ng < g[j]) {
         stamp[j] = st; g[j] = ng; came[j] = i;
-        const h = (Math.abs(nx - gx) + Math.abs(nz - gz)) * 0.012;
+        const jx = j % N, jz = (j / N) | 0;
+        const h = Math.max(Math.abs(jx - gx), Math.abs(jz - gz)) * 0.012;
         heap.push(ng + h, j);
       }
-    }
+    };
+    if (railMode) {
+      for (let d = 0; d < 4; d++) { const nx = x + DIRS[d][0], nz = z + DIRS[d][1]; if (inB(nx, nz)) relax(nx + nz * N, 0); }
+    } else eachRoadNbr(s, i, (j, d, diag) => relax(j, diag));
   }
   return null;
 }
@@ -143,14 +144,12 @@ export function roadDistances(s, starts, maxDist) {
     if (done[i] === st || d > maxDist) continue;
     done[i] = st;
     visited.push(i);
-    const x = i % N, z = (i / N) | 0;
-    for (let k = 0; k < 4; k++) {
-      const nx = x + DIRS[k][0], nz = z + DIRS[k][1]; if (!inB(nx, nz)) continue;
-      const j = nx + nz * N; if (!s.road[j]) continue;
-      const step = s.road[j] === 6 ? 0.7 : 1;
+    eachRoadNbr(s, i, (j, k, diag) => {
+      if (!s.road[j]) return;
+      const step = (s.road[j] === 6 ? 0.7 : 1) * (diag ? SQRT2 : 1);
       const nd = d + step;
       if (nd <= maxDist && (stamp[j] !== st || nd < dist[j])) { stamp[j] = st; dist[j] = nd; heap.push(nd, j); }
-    }
+    });
   }
   return { visited, dist };
 }

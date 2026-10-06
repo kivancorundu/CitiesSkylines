@@ -2,7 +2,10 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1424" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>Şehir Kurucu II</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
@@ -64,11 +67,20 @@
   <div id="inspector" class="ui hidden"></div>
   <div id="hint" class="hidden"></div>
   <div id="advisor" class="ui hidden"></div>
+  <div id="tool-info" class="ui hidden"></div>
+  <div id="tool-opts" class="ui hidden"></div>
   <div id="cursorinfo" class="hidden"></div>
   <div id="tooltip" class="hidden"></div>
   <div id="toasts"></div>
   <div id="banner" class="hidden"></div>
   <div id="modal" class="hidden"></div>
+  <div id="cam-btns" class="ui">
+    <button data-cam="rotL" title="Sola döndür">⟲</button><button data-cam="rotR" title="Sağa döndür">⟳</button>
+    <button data-cam="up" title="Eğimi artır">▲</button><button data-cam="down" title="Eğimi azalt">▼</button>
+    <button data-cam="zin" title="Yakınlaştır">＋</button><button data-cam="zout" title="Uzaklaştır">－</button>
+    <button id="cam-back" title="Geri / İptal">✖</button>
+  </div>
+  <div id="menu-root" class="menu-root hidden"></div>
   <div id="dialog" class="hidden"></div>
   <div id="loading">Şehir Kurucu II yükleniyor…</div>
 

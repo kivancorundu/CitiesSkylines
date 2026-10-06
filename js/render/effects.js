@@ -95,7 +95,7 @@ export class Effects {
 
   updateIcons(s, dist) {
     this.iconGroup.clear();
-    if (dist > 1100) return;
+    if (dist > 1100 || this.iconsOn === false) return;
     let n = 0;
     for (const id in s.buildings) {
       const b = s.buildings[id];
@@ -114,7 +114,7 @@ export class Effects {
     const sim = speedMul > 0;
     // duman ve ateş yayıcıları
     this.emitT += dt;
-    if (this.emitT > 0.08) {
+    if (this.emitT > 0.08 && this.particlesOn !== false) {
       this.emitT = 0;
       for (const id in s.buildings) {
         const b = s.buildings[id];
@@ -150,7 +150,7 @@ export class Effects {
     // hava
     const w = s.weather;
     const rain = w.rain, snow = w.snow;
-    this.weather.visible = rain > 0.05 || snow > 0.05;
+    this.weather.visible = this.weatherOn !== false && (rain > 0.05 || snow > 0.05);
     if (this.weather.visible) {
       const isSnow = snow > rain;
       this.wMat.color.setHex(isSnow ? 0xffffff : 0x9fb8d8); this.wMat.size = isSnow ? 1.4 : 0.7; this.wMat.opacity = Math.min(0.8, (isSnow ? snow : rain) + 0.1);

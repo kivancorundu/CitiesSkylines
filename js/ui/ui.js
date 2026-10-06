@@ -9,6 +9,8 @@ import { LINE_TYPES } from '../sim/transit.js';
 import { WEATHER_ICONS, clockHour } from '../sim/weather.js';
 import { PANELS, inspectorHTML, bindInspector, roadInspectorHTML } from './panels.js';
 import { createDistrict } from '../sim/actions.js';
+import { renderToolPanels, updatePreview } from './toolpanels.js';
+import { options } from '../core/options.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -36,25 +38,30 @@ export class UI {
 
   onKey(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const M = this.g.menus;
+    if (M.open) { if (e.code === 'Escape' && !this.g.inMenu) { e.preventDefault(); M.back(); } return; }
+    if (!$('dialog').classList.contains('hidden')) return;
     if (this.g.tools.key(e)) { e.preventDefault(); return; }
     if (e.code === 'Escape') {
       if (!$('modal').classList.contains('hidden')) { this.closeModal(); return; }
       if (this.panel) { this.closePanel(); return; }
       if (!$('inspector').classList.contains('hidden')) { this.inspect(null); return; }
+      if (this.cat) { this.selectCategory(null); return; }
       this.menu(); return;
     }
     if (!$('modal').classList.contains('hidden')) return;
-    if (e.code === 'Space') { e.preventDefault(); this.g.togglePause(); }
-    else if (e.code === 'Digit1') this.g.setSpeed(1);
-    else if (e.code === 'Digit2') this.g.setSpeed(2);
-    else if (e.code === 'Digit3') this.g.setSpeed(3);
-    else if (e.code === 'KeyB' && !e.ctrlKey) { this.selectCategory(null); this.g.tools.set({ type: 'bulldoze' }); }
-    else if (e.code === 'KeyI') this.togglePanel('info');
-    else if (e.code === 'KeyP') this.togglePanel('prog');
-    else if (e.code === 'KeyM') this.togglePanel('econ');
-    else if (e.code === 'KeyN') this.togglePanel('stats');
-    else if (e.code === 'F5') { e.preventDefault(); this.g.quickSave(); }
-    else if (e.code === 'F9') { e.preventDefault(); this.g.quickLoad(); }
+    const K = options().keys; const c = e.code;
+    if (c === K.pause) { e.preventDefault(); this.g.togglePause(); }
+    else if (c === K.speed1) this.g.setSpeed(1);
+    else if (c === K.speed2) this.g.setSpeed(2);
+    else if (c === K.speed3) this.g.setSpeed(3);
+    else if (c === K.bulldoze && !e.ctrlKey) { this.selectCategory(null); this.g.tools.set({ type: 'bulldoze' }); this.refreshToolbar(); }
+    else if (c === K.infoviews) this.togglePanel('info');
+    else if (c === K.progression) this.togglePanel('prog');
+    else if (c === K.economy) this.togglePanel('econ');
+    else if (c === K.stats) this.togglePanel('stats');
+    else if (c === K.quicksave) { e.preventDefault(); this.g.quickSave(); }
+    else if (c === K.quickload) { e.preventDefault(); this.g.quickLoad(); }
   }
 
   // ---------------- araç çubuğu ----------------
@@ -109,13 +116,13 @@ export class UI {
       }
     };
     if (key === 'roads') {
-      for (const r in ROADS) { const d = ROADS[r]; const un = isUnlocked(s, d.unlock); items.push(this.card({ act: 'road:' + r, icon: d.icon, name: d.name, cost: fmtMoney(d.cost) + '/hc', tip: `<b>${d.name}</b><br>${d.desc}<br>Hız: ${d.speed} km/s · Kapasite: ${d.cap}<br>Bakım: ${fmtMoney(d.upkeep)}/hücre/ay${un ? '' : '<br>' + unlockText(d.unlock)}`, locked: !un })); }
+      for (const r in ROADS) { const d = ROADS[r]; const un = isUnlocked(s, d.unlock); items.push(this.card({ act: 'road:' + r, icon: d.icon, name: d.name, cost: fmtMoney(d.cost) + '/hc', tip: `<b>${d.name}</b><br>${d.desc}<br>Hız: ${d.speed} km/sa · Kapasite: ${d.cap}<br>Bakım: ${fmtMoney(d.upkeep)}/hücre/ay${un ? '' : '<br>' + unlockText(d.unlock)}`, locked: !un })); }
       items.push('<div style="width:10px"></div>');
       for (const b in ROAD_UPGRADES) { const u = ROAD_UPGRADES[b]; items.push(this.card({ act: 'upg:' + b, icon: u.icon, name: u.name, cost: fmtMoney(u.cost), tip: `<b>${u.name}</b><br>${u.desc}<br>Shift ile kaldırın.` })); }
     } else if (key === 'zoning') {
       for (const z in ZONES) { const d = ZONES[z]; const un = zoneUnlocked(s, z); items.push(this.card({ act: 'zone:' + z, icon: `<span style="display:inline-block;width:24px;height:24px;border-radius:5px;background:${d.color}"></span>`, name: d.name, tip: `<b>${d.name}</b><br>${d.desc}${d.res ? '<br>Sadece ilgili doğal kaynak üzerinde.' : ''}${un ? '' : '<br>' + unlockText(d.unlock)}`, locked: !un })); }
       items.push(this.card({ act: 'zone:0', icon: '❌', name: 'Bölge Kaldır', tip: 'Seçilen alandaki bölgelemeyi kaldırır.' }));
-      html = html.replace('<span id="fly-extra"></span>', `<span class="modes" id="fly-extra">${['rect', 'brush', 'fill'].map((m) => `<button data-zmode="${m}" class="${this.g.tools.zoneMode === m ? 'on' : ''}">${{ rect: '▭ Dikdörtgen', brush: '🖌 Fırça', fill: '🪣 Doldur' }[m]}</button>`).join('')}</span>`);
+
     } else if (key === 'electricity') {
       items.push(this.card({ act: 'net:power', icon: NETWORKS.power.icon, name: NETWORKS.power.name, cost: fmtMoney(NETWORKS.power.cost) + '/hc', tip: `<b>${NETWORKS.power.name}</b><br>${NETWORKS.power.desc}` }));
       svcCards('electricity');
@@ -175,9 +182,10 @@ export class UI {
     $('st-net').textContent = (net >= 0 ? '+' : '') + fmtMoney(net) + '/ay'; $('st-net').className = net >= 0 ? 'pos' : 'neg';
     const h = st.happiness ?? 60;
     $('st-happy').textContent = Math.round(h) + '%'; $('st-happy-ico').textContent = h > 75 ? '😄' : h > 60 ? '🙂' : h > 45 ? '😐' : h > 30 ? '🙁' : '😠';
-    $('st-weather').textContent = WEATHER_ICONS[s.weather.state]; $('st-temp').textContent = Math.round(s.weather.temp) + '°C';
+    $('st-weather').textContent = WEATHER_ICONS[s.weather.state]; const tu = options().gameplay.tempUnit; $('st-temp').textContent = (tu === 'F' ? Math.round(s.weather.temp * 1.8 + 32) + '°F' : Math.round(s.weather.temp) + '°C');
     const ck = clockHour(s); const hh = Math.floor(ck), mm = Math.floor((ck - hh) * 60);
-    $('date').textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')} · ${MONTHS[s.time.month]} ${s.time.year}`;
+    const c24 = options().interface.clock24; const hs = c24 ? String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0') : `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'ÖÖ' : 'ÖS'}`;
+    $('date').textContent = innerWidth <= 760 ? `${MONTHS[s.time.month].slice(0, 3)} ${s.time.year}` : `${hs} · ${MONTHS[s.time.month]} ${s.time.year}`;
     const D = s.demand;
     for (const [id, v] of [['d-r', Math.max(D.resLow, D.resMed, D.resHigh)], ['d-c', D.com], ['d-i', D.ind], ['d-o', s.milestone >= 4 ? D.off : -0.01]]) {
       const el = $(id); const val = clamp(v, -1, 1);
@@ -240,7 +248,8 @@ export class UI {
       this.banner(`<div style="font-size:40px">🏆</div><h1>${m.name}</h1><div>Yeni kilometre taşı!</div><ul><li>Ödül: ${fmtMoney(m.money)}</li><li>Gelişim puanı: +${m.dp} ◆</li><li>Harita karosu izni: +${m.tiles}</li>${m.unlocks.map((u) => `<li>${u}</li>`).join('')}</ul><button class="btn good" id="banner-ok">Harika!</button>`);
       this.refreshToolbar(); if (this.cat) this.renderFlyout();
       this.g.sound('milestone');
-    } else if (e.type === 'fire') this.toast('🔥 Yangın çıktı!', 'bad');
+    } else if (!options().interface.chirperToasts) { /* olay bildirimleri kapalı */ }
+    else if (e.type === 'fire') this.toast('🔥 Yangın çıktı!', 'bad');
     else if (e.type === 'lightning') this.toast('⚡ Yıldırım düştü!', 'bad');
     else if (e.type === 'forestfire') this.toast('🌲🔥 Orman yangını başladı!', 'bad');
     else if (e.type === 'tornado') this.toast(e.warned ? '🌪️ Erken uyarı: Hortum yaklaşıyor! Vatandaşlar sığınaklara yönlendirildi.' : '🌪️ Hortum! Bir hortum şehre yaklaşıyor!', 'bad');
@@ -292,6 +301,9 @@ export class UI {
     el.querySelector('.x')?.addEventListener('click', () => this.inspect(null));
   }
 
+  renderToolPanels() { if (this.g.tools) renderToolPanels(this); }
+  updateToolPreview() { updatePreview(this); }
+
   // ---------------- yardımcılar ----------------
   setHint(t) { const h = $('hint'); h.textContent = t; h.classList.toggle('hidden', !t); }
   cursor(x, y, text) { const c = $('cursorinfo'); if (!text) { c.classList.add('hidden'); return; } c.textContent = text; c.style.left = x + 16 + 'px'; c.style.top = y + 18 + 'px'; c.classList.remove('hidden'); }
@@ -322,68 +334,8 @@ export class UI {
   modal(html) { const m = $('modal'); m.innerHTML = `<div class="mbox">${html}</div>`; m.classList.remove('hidden'); this.g.modalPause(true); return m; }
   closeModal() { $('modal').classList.add('hidden'); this.g.modalPause(false); }
 
-  menu() {
-    const m = this.modal(`<h1>🏙️ Şehir Kurucu II</h1><div style="color:var(--muted)">${this.s ? this.s.cityName + ' · ' + fmtNum(this.s.stats.pop || 0) + ' nüfus' : ''}</div>
-      <div class="menu">
-        <button class="btn" data-m="resume">▶ Devam Et</button>
-        <button class="btn" data-m="new">🆕 Yeni Oyun</button>
-        <button class="btn" data-m="save">💾 Kaydet</button>
-        <button class="btn" data-m="load">📂 Yükle</button>
-        <button class="btn" data-m="export">⬇️ Dosyaya Aktar (.json)</button>
-        <button class="btn" data-m="import">⬆️ Dosyadan Yükle</button>
-        <button class="btn" data-m="settings">⚙️ Ayarlar</button>
-        <button class="btn" data-m="help">❓ Kontroller ve Nasıl Oynanır</button>
-      </div>`);
-    m.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => this.menuAct(b.dataset.m)));
-  }
+  menu() { this.g.menus.showPause(); }
 
-  menuAct(a) {
-    const g = this.g;
-    if (a === 'resume') this.closeModal();
-    else if (a === 'new') {
-      const m = this.modal(`<h1>🆕 Yeni Oyun</h1><div class="row"><span class="l">Şehir adı</span><input type="text" id="ng-name" value="${['Yeşilvadi', 'Mavikent', 'Gökçeşehir', 'Altınkıyı'][(Math.random() * 4) | 0]}"></div><div class="row"><span class="l">Harita tohumu</span><input type="number" id="ng-seed" value="${(Math.random() * 99999) | 0}"></div><div class="row"><span class="l">Başlangıç parası</span><select id="ng-money"><option value="350000">Normal (₺350.000)</option><option value="1000000">Kolay (₺1.000.000)</option><option value="150000">Zor (₺150.000)</option><option value="99999999">Sınırsız</option></select></div><div class="row"><span class="l">Tüm kilitleri aç</span><input type="checkbox" id="ng-unlock"></div><div class="menu"><button class="btn good" id="ng-go">Şehri Kur</button><button class="btn" id="ng-back">Geri</button></div>`);
-      m.querySelector('#ng-go').addEventListener('click', () => { g.newGame(+$('ng-seed').value, $('ng-name').value, { money: +$('ng-money').value, unlockAll: $('ng-unlock').checked }); this.closeModal(); });
-      m.querySelector('#ng-back').addEventListener('click', () => this.menu());
-    } else if (a === 'save') {
-      const slots = g.listSaves();
-      const m = this.modal(`<h1>💾 Kaydet</h1><div class="row"><input type="text" id="sv-name" value="${this.s.cityName}" style="flex:1"><button class="btn good" id="sv-go">Kaydet</button></div><div class="sec">Mevcut kayıtlar</div>${slots.map((sl) => `<div class="row"><span>${sl.name}<br><small class="l">${sl.date} · ${fmtNum(sl.pop)} nüfus</small></span><button class="btn" data-ow="${sl.key}">Üzerine yaz</button></div>`).join('') || '<div class="l">Kayıt yok</div>'}<div class="menu"><button class="btn" id="sv-back">Geri</button></div>`);
-      m.querySelector('#sv-go').addEventListener('click', () => { if (g.save($('sv-name').value)) { this.toast('Kaydedildi', 'good'); this.closeModal(); } });
-      m.querySelectorAll('[data-ow]').forEach((b) => b.addEventListener('click', () => { if (g.save(null, b.dataset.ow)) { this.toast('Kaydedildi', 'good'); this.closeModal(); } }));
-      m.querySelector('#sv-back').addEventListener('click', () => this.menu());
-    } else if (a === 'load') {
-      const slots = g.listSaves();
-      const m = this.modal(`<h1>📂 Yükle</h1>${slots.map((sl) => `<div class="row"><span>${sl.name}<br><small class="l">${sl.date} · ${fmtNum(sl.pop)} nüfus</small></span><span><button class="btn good" data-ld="${sl.key}">Yükle</button> <button class="btn danger" data-del="${sl.key}">Sil</button></span></div>`).join('') || '<div class="l">Kayıt yok</div>'}<div class="menu"><button class="btn" id="ld-back">Geri</button></div>`);
-      m.querySelectorAll('[data-ld]').forEach((b) => b.addEventListener('click', () => { if (g.load(b.dataset.ld)) this.closeModal(); }));
-      m.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { this.confirmBox('Bu kayıt kalıcı olarak silinsin mi?', () => { g.deleteSave(b.dataset.del); this.menuAct('load'); }); }));
-      m.querySelector('#ld-back').addEventListener('click', () => this.menu());
-    } else if (a === 'export') g.exportFile();
-    else if (a === 'import') g.importFile();
-    else if (a === 'settings') {
-      const st = this.s.settings;
-      const opt = (k, n) => `<div class="row"><span>${n}</span><input type="checkbox" data-set="${k}" ${st[k] ? 'checked' : ''}></div>`;
-      const m = this.modal(`<h1>⚙️ Ayarlar</h1>${opt('advisor', 'Danışman ipuçları')}${opt('shadows', 'Gölgeler')}${opt('dayNight', 'Gün/gece döngüsü')}${opt('disasters', 'Doğal afetler')}${opt('autoDemolish', 'Terk edilmiş binaları otomatik yık')}${opt('edgeScroll', 'Kenar kaydırma')}<div class="row"><span>Ses efektleri</span><input type="checkbox" id="set-sound" ${g.soundOn ? 'checked' : ''}></div><div class="menu"><button class="btn" id="st-back">Geri</button></div>`);
-      m.querySelectorAll('[data-set]').forEach((c) => c.addEventListener('change', () => { st[c.dataset.set] = c.checked; g.renderer.cam.edgeScroll = st.edgeScroll; }));
-      m.querySelector('#set-sound').addEventListener('change', (e) => { g.soundOn = e.target.checked; });
-      m.querySelector('#st-back').addEventListener('click', () => this.menu());
-    } else if (a === 'help') {
-      const m = this.modal(`<h1>❓ Nasıl Oynanır</h1>
-        <div class="sec">Kamera</div>
-        <div><span class="kbd">W A S D</span> / oklar: kaydır · <span class="kbd">Q E</span>: döndür · <span class="kbd">R F</span>: eğim · Tekerlek: yakınlaştır · Sağ tık sürükle: döndür · Orta tık sürükle: kaydır · <span class="kbd">Shift</span>: hızlı</div>
-        <div class="sec">Kısayollar</div>
-        <div><span class="kbd">Boşluk</span> duraklat · <span class="kbd">1 2 3</span> hız · <span class="kbd">B</span> yıkım · <span class="kbd">I</span> bilgi görünümleri · <span class="kbd">P</span> ilerleme · <span class="kbd">M</span> ekonomi · <span class="kbd">N</span> istatistik · <span class="kbd">, .</span> binayı döndür · <span class="kbd">[ ]</span> fırça boyutu · <span class="kbd">F5/F9</span> hızlı kaydet/yükle · <span class="kbd">Esc</span> iptal/menü</div>
-        <div class="sec">Başlangıç</div>
-        <ol style="padding-left:18px;line-height:1.5">
-          <li>Otoyol bağlantısından şehre yollar çekin (Yollar).</li>
-          <li>Yolların kenarlarına <b>Konut</b>, <b>Ticari</b> ve <b>Sanayi</b> bölgeleri boyayın. Sanayiyi konutlardan uzak tutun (kirlilik).</li>
-          <li><b>Elektrik</b>: rüzgar türbini veya kömür santrali kurun; yollar elektriği taşır. Başlangıçta dış bağlantıdan elektrik ithal edilebilir.</li>
-          <li><b>Su</b>: nehir kıyısına su pompası, akıntı yönünde aşağıya kanalizasyon çıkışı kurun. Yolların altından su ve kanalizasyon borusu çekin (veya "Tüm Yollara Boru Döşe").</li>
-          <li>Alt çubuktaki talep çubuklarını (K/T/S/O) izleyin. Kilometre taşlarıyla sağlık, çöp, eğitim, itfaiye, polis, parklar ve daha fazlası açılır.</li>
-          <li>Gelişim puanlarıyla (◆) gelişim ağacından yeni binalar açın.</li>
-        </ol>`);
-      void m;
-      const back = document.createElement('div'); back.className = 'menu'; back.innerHTML = '<button class="btn">Geri</button>'; $('modal').querySelector('.mbox').appendChild(back); back.firstChild.addEventListener('click', () => this.menu());
-    }
-  }
 }
 
 function pct(v) { return Math.round(v * 100) + '%'; }

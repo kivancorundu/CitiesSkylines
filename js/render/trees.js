@@ -20,7 +20,8 @@ export class TreeView {
     const autumn = month >= 8 && month <= 10, winter = month === 11 || month <= 1, spring = month >= 2 && month <= 3;
     for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
       const i = z * N + x; const k = s.tree[i]; if (!k) continue;
-      for (let t = 0; t < k; t++) {
+      const keep = this.detail === 'low' ? 1 : this.detail === 'medium' ? 2 : 3;
+      for (let t = 0; t < Math.min(k, keep); t++) {
         const r1 = hash2(x * 7 + t, z, 11), r2 = hash2(x, z * 5 + t, 13), r3 = hash2(x + t, z + t, 17);
         const wx = (x + 0.15 + r1 * 0.7) * CS - HALF, wz = (z + 0.15 + r2 * 0.7) * CS - HALF;
         const y = heightAt(s, wx, wz) - 0.2;

@@ -37,7 +37,7 @@ export function computeCoverage(s) {
         cells.push(i);
       }
     } else {
-      const starts = perimeter(b).filter((c) => s.road[c]);
+      const starts = perimeter(b).filter((c) => s.road[c] && !s.rElev[c]);
       if (!starts.length) continue;
       const { visited, dist } = roadDistances(s, starts, radius);
       for (const i of visited) {

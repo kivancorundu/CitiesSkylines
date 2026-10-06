@@ -338,7 +338,7 @@ export function bindInspector(ui, el, b) {
 export function roadInspectorHTML(ui, i) {
   const s = ui.s; const r = ROADS[s.road[i]];
   const up = []; if (s.roadUp[i] & 1) up.push('Ağaçlar'); if (s.roadUp[i] & 2) up.push('Çim'); if (s.roadUp[i] & 4) up.push('Hız tümseği');
-  return `<div class="ph"><h2>${r.icon} ${r.name}</h2><button class="x">✕</button></div>${row('Hız sınırı', r.speed + ' km/s')}${row('Kapasite', r.cap)}${row('Trafik', Math.round(s.traffic[i]))}<div class="row"><span class="l">Yoğunluk</span>${bar(s.traffic[i] / r.cap, s.traffic[i] / r.cap > 0.9 ? 'var(--bad)' : '')}</div>${row('Bakım', fmtMoney(r.upkeep) + '/ay')}${row('Yükseltmeler', up.join(', ') || '-')}${row('Su borusu', s.pipeW[i] ? '✔' : '✖')}${row('Kanalizasyon', s.pipeS[i] ? '✔' : '✖')}${s.rail[i] === 2 ? row('Tramvay rayı', '✔') : ''}${row('Gürültü', pct(s.polN[i]))}`;
+  return `<div class="ph"><h2>${r.icon} ${r.name}</h2><button class="x">✕</button></div>${row('Hız sınırı', r.speed + ' km/sa')}${row('Kapasite', r.cap)}${row('Trafik', Math.round(s.traffic[i]))}<div class="row"><span class="l">Yoğunluk</span>${bar(s.traffic[i] / r.cap, s.traffic[i] / r.cap > 0.9 ? 'var(--bad)' : '')}</div>${row('Bakım', fmtMoney(r.upkeep) + '/ay')}${row('Yükseltmeler', up.join(', ') || '-')}${row('Su borusu', s.pipeW[i] ? '✔' : '✖')}${row('Kanalizasyon', s.pipeS[i] ? '✔' : '✖')}${s.rail[i] === 2 ? row('Tramvay rayı', '✔') : ''}${row('Gürültü', pct(s.polN[i]))}`;
 }
 
 export { isUnlocked, computeLinePath, N };

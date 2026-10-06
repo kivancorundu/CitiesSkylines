@@ -1,6 +1,6 @@
 // Araçlar: özel araçlar, kamyonlar, hizmet araçları ve toplu taşıma
 import * as THREE from '../vendor/three.module.min.js';
-import { N, CS, HALF, vidx, clamp } from '../core/constants.js';
+import { N, CS, HALF, vidx, clamp, eachRoadNbr } from '../core/constants.js';
 import { ROADS } from '../data/roads.js';
 import { LINE_TYPES } from '../sim/transit.js';
 import { Pool, mergeGeos, plainMaterial } from './geom.js';
@@ -17,9 +17,13 @@ function carGeo(len, w, h, cabin = true) {
 }
 
 function cellY(s, c) {
-  if (s.water[c]) return 2.25;
   const x = c % N, z = (c / N) | 0;
-  return (s.vh[vidx(x, z)] + s.vh[vidx(x + 1, z)] + s.vh[vidx(x, z + 1)] + s.vh[vidx(x + 1, z + 1)]) / 4 + 0.35;
+  let y = (s.vh[vidx(x, z)] + s.vh[vidx(x + 1, z)] + s.vh[vidx(x, z + 1)] + s.vh[vidx(x + 1, z + 1)]) / 4 + 0.35;
+  if (s.water[c]) y = Math.max(y, 2.25 + 0.35);
+  const el = s.rElev ? s.rElev[c] : 0;
+  if (el === 1) { let full = true; eachRoadNbr(s, c, (j) => { if (s.rElev[j] !== 1) full = false; }); y = Math.max(y - 0.35, 0) + (full ? 7 : 3.5) + 0.4; }
+  else if (el === 2) y -= 12; // tünelde görünmez
+  return y;
 }
 
 export class VehicleView {
@@ -55,7 +59,7 @@ export class VehicleView {
   // Yayalar: binaların önündeki kaldırımlarda kısa yürüyüşler
   updatePeds(s, dt, speedMul, put, P) {
     const pop = s.stats.pop || 0;
-    const target = Math.min(350, Math.floor(pop / 12));
+    const target = this.peds === false ? 0 : Math.min(Math.round(this.max * 0.8), Math.floor(pop / 12));
     const tw = s.rt.tw;
     while (this.peds.length < target && tw && tw.homes.length && Math.random() < 0.5) {
       const list = Math.random() < 0.5 || !tw.works.length ? tw.homes : tw.works;
@@ -64,7 +68,8 @@ export class VehicleView {
       const path = [b.access]; let c = b.access;
       for (let k = 0; k < 4 + ((Math.random() * 8) | 0); k++) {
         const x = c % N, z = (c / N) | 0; const opts = [];
-        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, nz = z + dz; if (nx < 0 || nz < 0 || nx >= N || nz >= N) continue; const j = nz * N + nx; if (s.road[j] && s.road[j] !== 6 && j !== path[path.length - 2]) opts.push(j); }
+        void x; void z;
+        eachRoadNbr(s, c, (j) => { if (s.road[j] && s.road[j] !== 6 && !s.rElev[j] && j !== path[path.length - 2]) opts.push(j); });
         if (!opts.length) break; c = opts[(Math.random() * opts.length) | 0]; path.push(c);
       }
       if (path.length < 2) break;
@@ -85,6 +90,7 @@ export class VehicleView {
   }
 
   posAt(s, path, u, out, laneOff = 1.7) {
+    if (s.leftHand) laneOff = -laneOff;
     const n = path.length - 1;
     const i = clamp(Math.floor(u), 0, n - 1), t = clamp(u - i, 0, 1);
     const a = path[i], b = path[i + 1];

@@ -1,5 +1,5 @@
 // Yol türleri (CS2: Yollar menüsü)
-// speed km/s, capacity: araç/ay ölçeği, cost: hücre başına, upkeep: hücre başına aylık
+// speed km/sa, capacity: araç/ay ölçeği, cost: hücre başına, upkeep: hücre başına aylık
 export const ROADS = {
   1: { key: 'small', name: 'Küçük Yol', desc: 'İki şeritli, mahalle yolu.', icon: '🛣️', speed: 40, cap: 700, cost: 120, upkeep: 2, noise: 0.25, zonable: true, color: 0x46484c, mark: 0xf2f2f2, lanes: 2, unlock: 0 },
   2: { key: 'gravel', name: 'Toprak Yol', desc: 'Ucuz ama yavaş. Kırsal alanlar için.', icon: '🟫', speed: 25, cap: 300, cost: 40, upkeep: 0.5, noise: 0.1, zonable: true, color: 0x8a7656, mark: null, lanes: 2, unlock: 0 },

@@ -9,6 +9,7 @@ import { accessCell } from './network.js';
 import { addXP, serviceUnlocked, zoneUnlocked, isUnlocked, allowedTiles, ownedTiles, tileCost } from './progression.js';
 import { zoneCellOk } from './growth.js';
 import { refreshRoads } from './simulation.js';
+import { fixCrossings, linkCells, unlinkAll, snapshotCells, restoreCells, neighborhood } from './roadtool.js';
 
 const ownedCell = (s, x, z) => !!s.owned[tileOf(x, z)];
 
@@ -32,41 +33,69 @@ function markRoadsDirty(s) {
 }
 
 // ---------------- YOLLAR ----------------
-export function planRoad(s, cells, type) {
-  const def = ROADS[type]; let cost = 0; const res = [];
-  for (const [x, z] of cells) {
+// opt: { elev: 0 zemin | 1 yükseltilmiş | 2 tünel, replace: sadece mevcut yolları değiştir }
+export function planRoadChains(s, chains, type, opt = {}) {
+  const def = ROADS[type]; let cost = 0; const res = []; const seen = new Set();
+  const elevMul = [1, 2, 3][opt.elev || 0];
+  for (const ch of chains) for (const [x, z] of ch) {
     if (!inB(x, z)) { res.push({ x, z, ok: false }); continue; }
-    const i = idx(x, z);
+    const i = idx(x, z); if (seen.has(i)) continue; seen.add(i);
     let ok = ownedCell(s, x, z);
     const b = s.bld[i] >= 0 ? s.buildings[s.bld[i]] : null;
     if (b && b.kind === 'svc') ok = false;
+    if (opt.replace && !s.road[i]) { res.push({ x, z, ok: false, skip: true }); continue; }
     if (s.road[i] === type) { res.push({ x, z, ok: true, same: true }); continue; }
-    let c = def.cost * (s.water[i] ? 3 : 1);
+    let c = def.cost * (s.water[i] && !opt.elev ? 3 : 1) * (s.road[i] ? 1 : elevMul);
     if (s.road[i]) c = Math.max(0, c - ROADS[s.road[i]].cost * 0.5);
     if (ok) cost += c;
     res.push({ x, z, ok });
   }
   return { cost: Math.round(cost), cells: res };
 }
+export function planRoad(s, cells, type, opt) { return planRoadChains(s, [cells], type, opt); }
 
-export function buildRoad(s, cells, type) {
+export function buildRoadChains(s, chains, type, opt = {}) {
   if (!isUnlocked(s, ROADS[type].unlock)) return { ok: false, msg: 'Bu yol türü henüz açılmadı' };
-  const plan = planRoad(s, cells, type);
+  chains = chains.map((c) => fixCrossings(s, c));
+  const plan = planRoadChains(s, chains, type, opt);
   if (plan.cost > s.money) return { ok: false, msg: 'Yetersiz para' };
+  if (!plan.cells.some((c) => c.ok && !c.same)) return { ok: false, msg: plan.cells.length ? 'Buraya yol yapılamaz' : '' };
+  const okSet = new Set(plan.cells.filter((c) => c.ok).map((c) => idx(c.x, c.z)));
+  const undo = { rec: snapshotCells(s, neighborhood(chains)), money: plan.cost };
   let n = 0;
   for (const c of plan.cells) {
     if (!c.ok || c.same) continue;
     const i = idx(c.x, c.z);
     const b = s.bld[i] >= 0 ? s.buildings[s.bld[i]] : null;
     if (b) removeBuilding(s, b, false);
+    const isNew = !s.road[i];
     s.road[i] = type; s.zone[i] = 0; s.tree[i] = 0;
-    if (!s.water[i]) smoothRoadCell(s, c.x, c.z);
+    if (isNew) s.rElev[i] = opt.elev || 0;
+    if (!s.water[i] && !s.rElev[i]) smoothRoadCell(s, c.x, c.z);
     n++;
+  }
+  if (!opt.replace) {
+    for (const ch of chains) for (let k = 1; k < ch.length; k++) {
+      const a = idx(ch[k - 1][0], ch[k - 1][1]), b = idx(ch[k][0], ch[k][1]);
+      if (okSet.has(a) && okSet.has(b) && s.road[a] && s.road[b]) linkCells(s, a, b);
+    }
   }
   s.money -= plan.cost;
   addXP(s, n * 0.15);
+  pushUndo(s, undo);
   markRoadsDirty(s); s.rt.dirty.trees = true;
   return { ok: true, n, cost: plan.cost };
+}
+
+export function buildRoad(s, cells, type, opt) { return buildRoadChains(s, [cells], type, opt); }
+
+function pushUndo(s, u) { const st = s.rt.undo || (s.rt.undo = []); st.push(u); if (st.length > 30) st.shift(); }
+export function canUndo(s) { return !!(s.rt.undo && s.rt.undo.length); }
+export function undoLast(s) {
+  const u = s.rt.undo && s.rt.undo.pop(); if (!u) return false;
+  restoreCells(s, u.rec); s.money += u.money;
+  markRoadsDirty(s); s.rt.dirty.trees = true; s.rt.dirty.zones = true; s.rt.dirty.netMesh = true;
+  return true;
 }
 
 function smoothRoadCell(s, x, z) {
@@ -83,7 +112,7 @@ export function removeRoads(s, cells) {
     if (!inB(x, z)) continue; const i = idx(x, z);
     if (!s.road[i] || s.outside[i]) continue;
     if (!ownedCell(s, x, z)) continue;
-    refund += ROADS[s.road[i]].cost * 0.5; s.road[i] = 0; s.roadUp[i] = 0; if (s.rail[i] === 2) s.rail[i] = 0; n++;
+    refund += ROADS[s.road[i]].cost * 0.5; unlinkAll(s, i); s.road[i] = 0; s.rElev[i] = 0; s.roadUp[i] = 0; if (s.rail[i] === 2) s.rail[i] = 0; n++;
   }
   s.money += refund; markRoadsDirty(s);
   return { ok: n > 0, n, refund };
@@ -349,13 +378,14 @@ export function terraform(s, hx, hz, mode, radius = 2, strength = 0.8) {
   return { ok: true };
 }
 
-export function plantTrees(s, hx, hz, radius = 1, remove = false) {
+export function plantTrees(s, hx, hz, radius = 1, remove = false, density = 0.7) {
   let n = 0;
   for (let z = hz - radius; z <= hz + radius; z++) for (let x = hx - radius; x <= hx + radius; x++) {
     if (!inB(x, z)) continue; const i = idx(x, z);
     if (remove) { if (s.tree[i]) { s.tree[i] = 0; n++; } continue; }
     if (s.water[i] || s.road[i] || s.bld[i] >= 0 || s.rail[i] || !ownedCell(s, x, z)) continue;
-    if (s.tree[i] < 3 && Math.random() < 0.7) { s.tree[i]++; n++; }
+    if (Math.hypot(x - hx, z - hz) > radius + 0.5) continue;
+    if (s.tree[i] < 3 && Math.random() < density) { s.tree[i]++; n++; }
   }
   const cost = remove ? 0 : n * 15;
   s.money -= cost; s.rt.dirty.trees = true;

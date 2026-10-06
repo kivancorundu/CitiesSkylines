@@ -8,9 +8,14 @@ Saf JavaScript (ES modülleri) + [three.js](https://threejs.org) ile yazıldı; 
 ## 🚀 Çalıştırma
 
 ```bash
-npm start            # veya: node server.cjs
-# tarayıcıda açın: http://localhost:8080
+npm start            # tarayıcı sürümü: http://localhost:8080
+npm install && npm run desktop   # masaüstü (Electron) sürümü
 ```
+
+### Platformlar
+- **PC (Windows/macOS/Linux):** `desktop/` klasöründeki Electron sarmalayıcısı oyunu yerel bir uygulama olarak açar (`npm run desktop`). `npm run dist:win|dist:mac|dist:linux` komutları için `electron-builder` kurulmalıdır (`npm i -D electron-builder`).
+- **Steam:** Yayın için Steamworks hesabı (Steam Direct ücreti), uygulama kimliği ve Steamworks SDK entegrasyonu (başarımlar, bulut kayıt) gerekir; Electron derlemesi Steam'e "depot" olarak yüklenir. Bu entegrasyon henüz yapılmadı.
+- **Mobil:** Oyun dokunmatik kontrollerle mobil tarayıcıda çalışır (tek parmak kaydır/araç, iki parmak yakınlaştır/döndür, ekran düğmeleri). Uygulama mağazaları için Capacitor veya benzeri bir sarmalayıcıyla paketlenebilir.
 
 Herhangi bir statik sunucu da olur (ör. `python3 -m http.server`). ES modülleri kullanıldığı için `index.html` dosyasını doğrudan çift tıklayarak (file://) açmak çalışmaz.
 
@@ -34,6 +39,7 @@ node tests/bot.mjs 60   # şehri 60 ay boyunca bir "bot belediye başkanı" ile 
 | Sol tık | Aracı kullan / binayı seç |
 | Sağ tık (sürüklemeden) | İptal / araçtan çık |
 | `,` `.` | Yerleştirilen binayı döndür |
+| `Ctrl+Z` | Son yol işlemini geri al |
 | `[` `]` | Fırça boyutu |
 | `Shift` + sürükle | Kaldırma modu (bölge, boru, hat, yol yükseltmesi, ilçe) |
 | `Boşluk` | Duraklat / devam |
@@ -42,6 +48,16 @@ node tests/bot.mjs 60   # şehri 60 ay boyunca bir "bot belediye başkanı" ile 
 | `I` `P` `M` `N` | Bilgi görünümleri / İlerleme / Ekonomi / İstatistik |
 | `F5` / `F9` | Hızlı kaydet / hızlı yükle |
 | `Esc` | İptal, paneli kapat, ana menü |
+
+## 🆕 Sürüm 0.3 – CS2 arayüzü
+- **Ana menü** (arkada dönen demo şehir): Devam Et, Yeni Oyun, Oyun Yükle, Seçenekler, Krediler, Çıkış
+- **Yeni Oyun ekranı:** 6 harita (Yeşil Vadi, Göl Kıyısı, Mavi Körfez, Dağ Geçidi, Kuzey Ovası, Tropik Adalar), 4 iklim, harita önizlemesi, kaynak/bağlantı bilgisi, tema (Avrupa / Kuzey Amerika), soldan trafik, doğal afetler, sınırsız para, tüm kilitleri aç
+- **Oyun Yükle ekranı:** küçük resimli kayıtlar, nüfus/para/harita/kilometre taşı bilgisi; otomatik kayıt
+- **Seçenekler:** Genel, Grafik (kalite ön ayarları Çok Düşük–Yüksek, çözünürlük ölçeği, gölgeler, ağaç ayrıntısı, araç yoğunluğu, FPS sınırı…), Oynanış, Arayüz (ölçek, 24 saat…), Ses, Klavye (tuş atama), Fare, Dokunmatik
+- **Duraklatma menüsü:** Devam Et, Kaydet, Yükle, Seçenekler, Ana Menüye Dön
+- **CS2 sol panelleri:** her araçta üstte seçili öğe bilgisi, altta araç seçenekleri
+- **Yol aracı modları:** Düz (her açı), Kavisli, Sürekli, Izgara, Değiştir; açı/uzunluk/mevcut yol yapıştırma; yükseklik (zemin / yükseltilmiş / tünel); paralel mod; geri al (Ctrl+Z)
+- **8 yönlü yol ağı:** çapraz ve kavisli yollar; paralel yollar artık birbirine kendiliğinden bağlanmaz
 
 ## ✅ Cities: Skylines II özellik listesi ve oyundaki karşılıkları
 
@@ -59,6 +75,7 @@ CS2'nin özellikleri tek tek ele alınıp (kilometre taşı listesi, bölge tür
 - Küçük yol, toprak yol, orta yol, büyük bulvar (refüjlü), toplu taşıma şeritli yol, otoyol, yaya yolu
 - Su üzerinde otomatik **köprüler**, eğimli arazide yokuşlar, kavşaklarda yaya geçitleri, sokak lambaları
 - **Yol yükseltmeleri**: ağaçlar, çim şerit, hız tümseği
+- Düz, kavisli, sürekli, ızgara ve değiştir modları; yükseltilmiş yollar ve tüneller
 - Yolların altından geçen alçak gerilim (CS2'deki gibi yollar elektrik taşır)
 - **Trafik simülasyonu**: A* ile yol bulan yolculuklar (ev→iş, ev→alışveriş, sanayi kamyonları), sıkışıklık, trafik akışı istatistiği, hareketli araçlar
 - **Toplu taşıma hatları**: Otobüs, Tramvay (tramvay rayı ile), Metro (yeraltı tünel + istasyon), Tren (ray + istasyon); depo/garaj gereksinimi, araç sayısı, yolcu ve bilet geliri, hat renkleri

@@ -1,7 +1,9 @@
 // Mevsimler, hava durumu, gün/gece döngüsü (CS2: iklim ve hava)
 import { clamp } from '../core/constants.js';
 
-export const CLIMATE = [-2, 0, 5, 11, 16, 20, 23, 22, 17, 11, 5, 0];
+import { CLIMATES } from '../data/maps.js';
+export const CLIMATE = CLIMATES.temperate.temps;
+const climateOf = (s) => (CLIMATES[s.climate] || CLIMATES.temperate).temps;
 export const SEASONS = ['Kış', 'Kış', 'İlkbahar', 'İlkbahar', 'İlkbahar', 'Yaz', 'Yaz', 'Yaz', 'Sonbahar', 'Sonbahar', 'Sonbahar', 'Kış'];
 export const WEATHER_NAMES = { clear: 'Açık', partly: 'Parçalı Bulutlu', cloudy: 'Bulutlu', rain: 'Yağmurlu', storm: 'Fırtınalı', snow: 'Karlı', fog: 'Sisli' };
 export const WEATHER_ICONS = { clear: '☀️', partly: '⛅', cloudy: '☁️', rain: '🌧️', storm: '⛈️', snow: '🌨️', fog: '🌫️' };
@@ -24,7 +26,8 @@ export function daylightAt(month, tod) {
 
 export function weatherTick(s) {
   const w = s.weather, t = s.time;
-  const base = CLIMATE[t.month] + (CLIMATE[(t.month + 1) % 12] - CLIMATE[t.month]) * (t.tod / 24);
+  const CL = climateOf(s);
+  const base = CL[t.month] + (CL[(t.month + 1) % 12] - CL[t.month]) * (t.tod / 24);
   const hour = clockHour(s);
   const diurnal = Math.sin(((hour - 9) / 24) * Math.PI * 2) * 4;
   const cloudCool = w.cloud * -2;
@@ -32,7 +35,7 @@ export function weatherTick(s) {
   w.timer -= 1;
   if (w.timer <= 0) {
     w.timer = 25 + Math.random() * 50;
-    const cold = CLIMATE[t.month] < 2, warm = CLIMATE[t.month] > 15;
+    const cold = CL[t.month] < 2, warm = CL[t.month] > 15;
     const r = Math.random();
     let st;
     if (r < (warm ? 0.45 : 0.3)) st = 'clear';

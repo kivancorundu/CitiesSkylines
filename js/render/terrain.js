@@ -108,6 +108,11 @@ export class TerrainView {
     this.skirtGeo.computeVertexNormals();
   }
 
+  setWaterQuality(q) {
+    this.waterMat.shininess = q === 'low' ? 10 : 90;
+    this.waterMat.specular.setHex(q === 'low' ? 0x223344 : 0x88aacc);
+  }
+
   setOverlay(data, grid) {
     this.ovData.set(data);
     this.ovTex.needsUpdate = true;

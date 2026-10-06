@@ -4,6 +4,10 @@ import { mulberry32 } from '../core/rng.js';
 import { ZONES } from '../data/zones.js';
 import { SERVICES } from '../data/services.js';
 
+let THEME = 'eu';
+export function setBuildingTheme(t) { THEME = t || 'eu'; }
+const HOUSE_NA = [0xd6dfe6, 0xe9e4d8, 0xb9c7cf, 0xf2f2ee, 0xc9c1b0, 0x9fb3bf, 0xe6d6b8];
+const ROOF_NA = [0x3f4248, 0x55504a, 0x2f3338, 0x6a5e52];
 const HOUSE = [0xf2e6d0, 0xe8d5b5, 0xd9e3ea, 0xf5f1e6, 0xe6c9a8, 0xcfd8c4, 0xf0d9d9, 0xdcdcdc, 0xe9dcc0];
 const ROOF = [0x8a4b3a, 0x5a4a42, 0x6b3f2f, 0x4a5560, 0x7a3a2a, 0x3f3f44, 0x6a5a50];
 const APT = [0xe0d6c8, 0xc9b8a3, 0xd8d0c0, 0xbfb6a8, 0xe8e2d4, 0xc4a98a, 0xd5c7b0];
@@ -53,9 +57,9 @@ function zoneParts(out, b, R, W, D) {
     case 'house': {
       P(out, 'b', 0, 0, 0, W - 0.4, 0.15, D - 0.4, GRASS);
       const bw = Math.min(W - 2.5, 7 + R() * 3 + lvl * 0.5), bd = Math.min(D * 0.5, 6.5 + R() * 2);
-      const zc = D / 2 - 2.5 - bd / 2; const col = pick(R, HOUSE);
+      const zc = D / 2 - 2.5 - bd / 2; const col = pick(R, THEME === 'na' ? HOUSE_NA : HOUSE);
       P(out, 'w', -W * 0.08, 0, zc, bw, H, bd, col);
-      const roofH = 2.4 + R() * 1.2; const rc = pick(R, ROOF);
+      const roofH = 2.4 + R() * 1.2; const rc = pick(R, THEME === 'na' ? ROOF_NA : ROOF);
       if (R() < 0.75) P(out, 'r', -W * 0.08, H, zc, bw + 0.6, roofH, bd + 0.8, rc);
       else { P(out, 'r', -W * 0.08, H, zc, bd + 0.8, roofH, bw + 0.6, rc, Math.PI / 2); }
       if (W > 10) P(out, 'b', W / 2 - 2.6, 0, D / 2 - 4, 3.4, 0.12, 8, ASPH); // araba yolu

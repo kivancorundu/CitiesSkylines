@@ -12,9 +12,10 @@ import { buildOverlay, buildingTint, roadTint } from './infoviews.js';
 import { clockHour } from '../sim/weather.js';
 
 export class Renderer {
-  constructor(canvas, getState) {
+  constructor(canvas, getState, ropts = {}) {
     this.getState = getState;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: ropts.antialias !== false, powerPreference: 'high-performance' });
+    this.gfx = { resScale: 1, shadows: 'medium', fog: true, treeDetail: 'high', vehicleDensity: 1, pedestrians: true, particles: true, waterQuality: 'high', weatherFx: true };
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -44,6 +45,21 @@ export class Renderer {
     this.skyDay = new THREE.Color(0x9ec9ec); this.skyNight = new THREE.Color(0x0b1424); this.skyDusk = new THREE.Color(0xe8a070);
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  }
+
+  applyGraphics(g) {
+    const prevTrees = this.gfx.treeDetail;
+    this.gfx = { ...g };
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2) * (g.resScale || 1));
+    const sz = { off: 512, low: 1024, medium: 2048, high: 4096 }[g.shadows] || 2048;
+    if (this.sun.shadow.mapSize.x !== sz) { this.sun.shadow.mapSize.set(sz, sz); if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; } }
+    this.renderer.shadowMap.enabled = g.shadows !== 'off';
+    this.terrain.setWaterQuality(g.waterQuality);
+    this.vehicles.max = Math.round(450 * (g.vehicleDensity ?? 1));
+    this.vehicles.peds = g.pedestrians;
+    this.trees.detail = g.treeDetail;
+    const s = this.getState(); if (s && prevTrees !== g.treeDetail) s.rt.dirty.trees = true;
+    this.resize();
   }
 
   resize() {
@@ -105,7 +121,7 @@ export class Renderer {
     this.sun.position.set(t.x + sd.x * 1200, t.y + sd.y * 1200, t.z + sd.z * 1200);
     this.sun.target.position.copy(t);
     const sc = this.sun.shadow.camera; sc.left = -range; sc.right = range; sc.top = range; sc.bottom = -range; sc.near = 10; sc.far = 3000; sc.updateProjectionMatrix();
-    this.sun.castShadow = s.settings.shadows;
+    this.sun.castShadow = this.gfx.shadows !== 'off';
     const cloud = s.weather.cloud;
     this.sun.intensity = (0.15 + 2.1 * dayF) * (1 - cloud * 0.55) + (s.rt.flash || 0) * 4;
     this.hemi.intensity = 0.35 + 0.85 * dayF + (s.rt.flash || 0) * 2;
@@ -117,6 +133,7 @@ export class Renderer {
     this.scene.fog.color.copy(sky);
     const fogF = s.weather.fog || 0;
     this.scene.fog.near = lerp(900, 120, fogF) + this.cam.dist * 0.5; this.scene.fog.far = lerp(4200, 900, fogF) + this.cam.dist;
+    if (!this.gfx.fog && fogF < 0.05) { this.scene.fog.near = 1e5; this.scene.fog.far = 2e5; }
     this.sun.color.setHSL(0.1, 0.6, 0.5 + 0.45 * dayF);
     this.uniforms.uNight.value = clamp(night * 1.2, 0, 1);
     this.uniforms.uSnow.value = s.weather.snowCover;
@@ -142,6 +159,7 @@ export class Renderer {
     while (s.rt.vehicleSpawn.length) { const v = s.rt.vehicleSpawn.shift(); this.vehicles.spawn(s, v.path, v.kind); }
     this.vehicles.update(s, dt, speedMul, this.view === 'transit' || opts.showLines);
     this.buildings.animate(dt, s.weather.windStrength, speedMul === 0);
+    this.effects.particlesOn = this.gfx.particles; this.effects.weatherOn = this.gfx.weatherFx; this.effects.iconsOn = s.settings.icons !== false;
     this.effects.update(s, dt, speedMul, t, night, this.cam.dist);
     const sel = s.rt.selected ? s.buildings[s.rt.selected] : null;
     this.buildings.setSelection(s, sel);

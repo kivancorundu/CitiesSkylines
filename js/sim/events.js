@@ -27,7 +27,7 @@ export function dispatchFrom(s, target, pred, kind) {
     if (dd < bd) { bd = dd; best = b; }
   }
   if (!best) return;
-  const st = perimeter(best).find((c) => s.road[c]);
+  const st = perimeter(best).find((c) => s.road[c] && !s.rElev[c]);
   if (st === undefined) return;
   const path = findPath(s, st, target.access, 'service', 6000);
   if (path) s.rt.vehicleSpawn.push({ path, kind, target: target.id });

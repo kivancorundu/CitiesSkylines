@@ -2,19 +2,21 @@
 import { N, TILE, TILES, idx, vidx, inB, clamp, tileOf } from './constants.js';
 import { makeNoise, mulberry32 } from './rng.js';
 import { CITY_NAMES } from '../data/names.js';
+import { mapByKey } from '../data/maps.js';
 
 const ARRAYS_U8 = ['water', 'road', 'roadUp', 'zone', 'pipeW', 'pipeS', 'power', 'rail', 'metro', 'district', 'tree', 'res', 'owned', 'outside'];
 const ARRAYS_F32 = ['vh', 'resAmt', 'gw', 'wind', 'polG', 'polA', 'polN', 'polW', 'lv', 'traffic', 'crimeMap'];
 export const COV_TYPES = ['health', 'death', 'garbage', 'edu1', 'edu2', 'edu3', 'edu4', 'fire', 'police', 'park', 'post', 'telecom', 'shelter', 'welfare', 'transit'];
 
-export function createState(seed = (Math.random() * 1e9) | 0, cityName) {
+export function createState(seed = (Math.random() * 1e9) | 0, cityName, mapKey = 'valley', opts = {}) {
+  const mp = mapByKey(mapKey);
   const C = N * N;
   const s = {
     version: 1,
-    seed,
+    seed, map: mp.key, climate: mp.climate, theme: opts.theme || 'eu', leftHand: !!opts.leftHand,
     cityName: cityName || CITY_NAMES[seed % CITY_NAMES.length],
     vh: new Float32Array((N + 1) * (N + 1)),
-    water: new Uint8Array(C), road: new Uint8Array(C), roadUp: new Uint8Array(C), zone: new Uint8Array(C),
+    water: new Uint8Array(C), road: new Uint8Array(C), rConn: new Uint8Array(C), rElev: new Uint8Array(C), roadUp: new Uint8Array(C), zone: new Uint8Array(C),
     bld: new Int32Array(C).fill(-1),
     pipeW: new Uint8Array(C), pipeS: new Uint8Array(C), power: new Uint8Array(C),
     rail: new Uint8Array(C), metro: new Uint8Array(C), district: new Uint8Array(C), tree: new Uint8Array(C),
@@ -48,17 +50,18 @@ export function createState(seed = (Math.random() * 1e9) | 0, cityName) {
     landfillStored: {},
   };
   for (const t of ['health', 'death', 'garbage', 'edu1', 'edu2', 'edu3', 'edu4', 'fire', 'police', 'park', 'post', 'telecom', 'shelter', 'welfare', 'transit']) s.cov[t] = new Float32Array(C);
-  generateMap(s);
+  generateMap(s, mp);
   return s;
 }
 
 // ---------------- Harita üretimi ----------------
-function generateMap(s) {
+function generateMap(s, m) {
   const nz = makeNoise(s.seed), nz2 = makeNoise(s.seed + 11), nz3 = makeNoise(s.seed + 23), nz4 = makeNoise(s.seed + 37), nz5 = makeNoise(s.seed + 51);
   const rand = mulberry32(s.seed + 5);
   const N1 = N + 1;
-  const riverX = (z) => N * 0.565 + Math.sin(z * 0.045 + s.seed % 7) * 6 + nz.noise(z * 0.03, 3.3) * 5 + Math.max(0, Math.abs(z - N / 2) - 30) * 0.25;
-  const lakeCx = N * 0.2 + rand() * 10, lakeCz = N * 0.82 + rand() * 6, lakeR = 13 + rand() * 4;
+  const rv = m.river;
+  const riverX = rv ? (z) => N * rv.x + Math.sin(z * 0.045 + s.seed % 7) * rv.amp + nz.noise(z * 0.03, 3.3) * 5 + Math.max(0, Math.abs(z - N / 2) - 30) * 0.25 : null;
+  const lakes = (m.lakes || []).map((l) => ({ x: N * l.x + (rand() - 0.5) * 6, z: N * l.z + (rand() - 0.5) * 6, r: l.r + rand() * 3 }));
   const startC = N / 2;
   for (let z = 0; z <= N; z++) {
     for (let x = 0; x <= N; x++) {
@@ -68,16 +71,29 @@ function generateMap(s) {
       const edge = clamp(Math.max(Math.abs(dx), Math.abs(dz)) - 0.55, 0, 1) / 0.45;
       const ridge = 1 - Math.abs(nz2.fbm(x * 0.03, z * 0.03, 4));
       const centerFlat = 1 - clamp(1 - Math.hypot(dx, dz) * 1.6, 0, 1) * 0.65;
-      let h = 3 + e * 9 * centerFlat + edge * edge * ridge * 55;
+      let h = 3 + e * m.rough * centerFlat + edge * edge * ridge * m.mountains;
+      // deniz
+      if (m.sea) {
+        let sd;
+        if (m.sea.side === 'east') sd = (x / N) - (1 - m.sea.w) + nz3.noise(z * 0.04, 7) * 0.05;
+        else sd = Math.hypot(dx, dz) * 0.5 - (0.5 - m.sea.w * 0.5) + nz3.fbm(x * 0.03, z * 0.03, 3) * 0.08;
+        if (sd > 0) h = Math.min(h, -1.5 - sd * 40);
+        else if (sd > -0.06) h = Math.min(h, 0.2 + (-sd / 0.06) * Math.max(0, h - 0.2));
+        if (m.sea.side === 'east') h += 0; // kıyı
+      }
       // nehir
-      const rd = Math.abs(x - riverX(z));
-      const rw = 3.2 + nz3.noise(z * 0.05, 1) * 1.2;
-      if (rd < rw) h = -4.5 + (rd / rw) * 2;
-      else if (rd < rw + 6) h = Math.min(h, -2.5 + ((rd - rw) / 6) * (h + 2.5) + 1.2);
-      // göl
-      const ld = Math.hypot(x - lakeCx, z - lakeCz);
-      if (ld < lakeR) h = Math.min(h, -4 + (ld / lakeR) * 3.0);
-      else if (ld < lakeR + 6) h = Math.min(h, -1 + ((ld - lakeR) / 6) * (h + 1));
+      if (riverX) {
+        const rd = Math.abs(x - riverX(z));
+        const rw = rv.width + nz3.noise(z * 0.05, 1) * 1.2;
+        if (rd < rw) h = Math.min(h, -4.5 + (rd / rw) * 2);
+        else if (rd < rw + 6) h = Math.min(h, -2.5 + ((rd - rw) / 6) * (h + 2.5) + 1.2);
+      }
+      // göller
+      for (const l of lakes) {
+        const ld = Math.hypot(x - l.x, z - l.z);
+        if (ld < l.r) h = Math.min(h, -4 + (ld / l.r) * 3.0);
+        else if (ld < l.r + 6) h = Math.min(h, -1 + ((ld - l.r) / 6) * (h + 1));
+      }
       s.vh[z * N1 + x] = h;
     }
   }
@@ -96,10 +112,10 @@ function generateMap(s) {
       const forest = nz4.fbm(x * 0.06 + 50, z * 0.06 + 50, 3);
       const oil = nz5.fbm(x * 0.07 + 200, z * 0.07, 2);
       const ore = nz2.fbm(x * 0.06 + 300, z * 0.06, 3);
-      if (h > 14 && ore > 0.25) { s.res[i] = 4; s.resAmt[i] = 1; }
-      else if (oil > 0.42 && h < 10) { s.res[i] = 3; s.resAmt[i] = 1; }
-      else if (forest > 0.22) { s.res[i] = 2; s.resAmt[i] = 1; }
-      else if (fert > 0.18 && h < 8 && slope < 2) { s.res[i] = 1; s.resAmt[i] = 1; }
+      if (h > 14 && ore > m.ore) { s.res[i] = 4; s.resAmt[i] = 1; }
+      else if (oil > m.oil && h < 10) { s.res[i] = 3; s.resAmt[i] = 1; }
+      else if (forest > m.forest) { s.res[i] = 2; s.resAmt[i] = 1; }
+      else if (fert > m.fertile && h < 8 && slope < 2) { s.res[i] = 1; s.resAmt[i] = 1; }
       // ağaçlar
       if (s.res[i] === 2) s.tree[i] = 2 + (rand() * 2) | 0;
       else if (forest > 0.05 && rand() < 0.5) s.tree[i] = 1;
@@ -118,6 +134,7 @@ function generateMap(s) {
     s.power[idx(x, hz - 1)] = x < startX - 1 ? 1 : 0; // dış elektrik bağlantısı hattı
     s.tree[idx(x, hz - 1)] = 0;
   }
+  for (let x = 0; x <= startX + 3; x++) { const i = idx(x, hz); if (x > 0) s.rConn[i] |= 1 << 4; if (x < startX + 3) s.rConn[i] |= 1 << 0; }
   s.outside[idx(0, hz)] = 1;           // otoyol dış bağlantısı
   s.outside[idx(0, hz - 1)] = 2;       // elektrik dış bağlantısı
   // otoyolun bittiği yerden küçük bir bağlantı yolu
@@ -205,6 +222,16 @@ export function deserialize(json) {
   if (o.cov && o.cov.health && o.cov.health.__t) for (const t in o.cov) o.cov[t] = fix(o.cov[t]);
   if (!o.cov || !o.cov.health || !(o.cov.health instanceof Float32Array)) { o.cov = {}; for (const t of COV_TYPES) o.cov[t] = new Float32Array(C); }
   if (!o.polW) o.polW = new Float32Array(C);
+  if (!o.rElev) o.rElev = new Uint8Array(C);
+  if (!o.rConn) {
+    // eski kayıtlar: dik komşuluktan bağlantı çıkar
+    o.rConn = new Uint8Array(C);
+    for (let i = 0; i < C; i++) {
+      if (!o.road[i]) continue; const x = i % N, z = (i / N) | 0;
+      if (x + 1 < N && o.road[i + 1]) { o.rConn[i] |= 1; o.rConn[i + 1] |= 1 << 4; }
+      if (z + 1 < N && o.road[i + N]) { o.rConn[i] |= 1 << 2; o.rConn[i + N] |= 1 << 6; }
+    }
+  }
   return o;
 }
 
