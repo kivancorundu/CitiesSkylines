@@ -12,6 +12,9 @@ import { Menus } from './ui/menus.js';
 import { TouchControls } from './ui/touch.js';
 import { options, onOptions, setOption, IS_TOUCH } from './core/options.js';
 import { buildDemoCity } from './core/demo.js';
+
+// Oyunun kendi adresi (GitHub deposundan doğrudan; GitHub Pages açılınca oradan da oynanabilir)
+const GAME_URL = 'https://raw.githack.com/kivancorundu/CitiesSkylines/ccr-eaff1c09-u6xpln/index.html';
 import { setBuildingTheme } from './render/buildingParts.js';
 
 const SAVE_PREFIX = 'sk2_save_';
@@ -64,17 +67,40 @@ class Game {
     return this._standalone;
   }
   enterFullscreen(quiet = false) {
-    const el = document.documentElement;
+    const d = document, el = d.documentElement;
     const req = el.requestFullscreen || el.webkitRequestFullscreen;
-    if (!req) {
-      // iPhone Safari sayfalar için tam ekranı desteklemez: ana ekrana eklenince uygulama gibi tam ekran açılır
-      if (!quiet) this.ui.toast(/iPhone|iPod/.test(navigator.userAgent) ? 'iPhone\'da tam ekran için: Paylaş ⬆️ → "Ana Ekrana Ekle", sonra oyunu ana ekrandaki simgeden açın.' : 'Bu tarayıcı tam ekranı desteklemiyor. Menüden "Ana ekrana ekle" ile uygulama gibi tam ekran açabilirsiniz.');
-      return;
-    }
+    const embedded = (() => { try { return window.self !== window.top; } catch { return true; } })();
+    const allowed = d.fullscreenEnabled || d.webkitFullscreenEnabled;
+    // gömülü önizleme (ör. claude.ai) tam ekrana izin vermez: oyunu kendi adresinde açmayı öner
+    if (!req || !allowed) { if (!quiet) this.fullscreenHelp(embedded); return; }
     try {
       const p = req.call(el, { navigationUI: 'hide' });
-      if (p && p.catch) p.catch(() => { if (!quiet) this.ui.toast('Tarayıcı tam ekrana izin vermedi. Oyunu kendi sekmesinde açıp tekrar deneyin veya "Ana ekrana ekle"yi kullanın.', 'bad'); });
-    } catch { /* izin yok */ }
+      if (p && p.catch) p.catch(() => { if (!quiet) this.fullscreenHelp(embedded); });
+    } catch { if (!quiet) this.fullscreenHelp(embedded); }
+  }
+  fullscreenHelp(embedded) {
+    const iphone = /iPhone|iPod/.test(navigator.userAgent);
+    const dlg = document.getElementById('dialog');
+    const why = embedded
+      ? 'Oyun şu an başka bir sayfanın içinde (önizleme penceresi) açık ve o sayfa tam ekrana izin vermiyor.'
+      : iphone ? 'iPhone Safari, web sayfalarının tam ekran olmasına izin vermiyor.' : 'Bu tarayıcı tam ekrana izin vermedi.';
+    const how = iphone
+      ? 'Oyunu kendi adresinde açın, sonra Safari\'de <b>Paylaş ⬆️ → Ana Ekrana Ekle</b> deyin. Ana ekrandaki simgeden açınca adres çubuğu olmadan tam ekran çalışır.'
+      : 'Oyunu kendi adresinde açın ve oradaki <b>⛶</b> düğmesine basın. Chrome menüsü → <b>Ana ekrana ekle</b> ile uygulama gibi hep tam ekran açılır.';
+    dlg.innerHTML = `<div class="dbox fs-help"><div class="sec">Tam ekran</div><p>${why}</p><p>${how}</p>
+      <input type="text" id="fs-url" readonly value="${GAME_URL}">
+      <p class="muted">Not: Kayıtlar her adreste ayrı tutulur. Şehrinizi taşımak için Duraklat menüsü → <b>Dosyaya Aktar</b>, yeni adreste <b>Dosyadan Yükle</b>.</p>
+      <div class="row" style="justify-content:flex-end;gap:6px;flex-wrap:wrap"><button class="btn" id="fs-no">Kapat</button><button class="btn" id="fs-copy">Bağlantıyı kopyala</button><a class="btn good" id="fs-open" href="${GAME_URL}" target="_blank" rel="noopener">Kendi adresinde aç</a></div></div>`;
+    dlg.classList.remove('hidden');
+    const close = () => dlg.classList.add('hidden');
+    document.getElementById('fs-no').onclick = close;
+    document.getElementById('fs-open').onclick = () => setTimeout(close, 300);
+    document.getElementById('fs-copy').onclick = () => {
+      const inp = document.getElementById('fs-url'); inp.select(); inp.setSelectionRange(0, 999);
+      const done = () => this.ui.toast('Bağlantı kopyalandı – tarayıcıda yeni sekmeye yapıştırın', 'good');
+      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(GAME_URL).then(done, () => { try { document.execCommand('copy'); done(); } catch { /* elle kopyalanır */ } });
+      else { try { document.execCommand('copy'); done(); } catch { /* elle kopyalanır */ } }
+    };
   }
   exitFullscreen() { const d = document; const ex = d.exitFullscreen || d.webkitExitFullscreen; if (ex) { const p = ex.call(d); if (p && p.catch) p.catch(() => {}); } }
   toggleFullscreen() {

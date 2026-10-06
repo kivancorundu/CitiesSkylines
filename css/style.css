@@ -371,3 +371,9 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   .op-sel span { min-width: 100px; }
   .mm-card { display: none; }
 }
+
+/* tam ekran yardımı */
+.fs-help p { margin: 0 0 10px; line-height: 1.45; }
+.fs-help .muted { opacity: 0.7; font-size: 12px; }
+.fs-help input { width: 100%; box-sizing: border-box; margin: 0 0 10px; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: rgba(0,0,0,0.3); color: inherit; font-size: 12px; }
+.fs-help a.btn { text-decoration: none; display: inline-flex; align-items: center; }
